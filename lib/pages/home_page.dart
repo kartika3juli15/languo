@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import '../screen/qr_scanner_screen.dart';
-import '../screen/employee_detail_screen.dart'; // Import EmployeeDetailScreen
+import '../screen/employee_detail_screen.dart';
 import 'profile_page.dart';
 import 'package:languo/pages/kehadiran_page.dart';
+import 'package:languo/pages/pengajuan_izin_page.dart'; // Import file pengajuan izin
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -296,7 +297,13 @@ class _HomePageState extends State<HomePage> {
             MaterialPageRoute(builder: (_) => const KehadiranPage()),
           );
         }),
-        _menuButton(Icons.description, "Izin", () {}),
+        _menuButton(Icons.description, "Izin", () {
+          // Navigasi ke halaman Pengajuan Izin
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const PengajuanIzinPage()),
+          );
+        }),
         _menuButton(Icons.medical_services, "Sakit", () {}),
         _menuButton(Icons.schedule, "Cuti", () {}),
       ],

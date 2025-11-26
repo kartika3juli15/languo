@@ -6,11 +6,10 @@ import 'package:image_picker/image_picker.dart';
 import '../models/user_model.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:crypto/crypto.dart';
-import 'dart:convert';
+import 'package:bcrypt/bcrypt.dart';
 
 String hashPassword(String password) {
-  return sha256.convert(utf8.encode(password)).toString();
+  return BCrypt.hashpw(password, BCrypt.gensalt());
 }
 
 class EditProfilePage extends StatefulWidget {

@@ -3,8 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:flutter_facebook_auth/flutter_facebook_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'dart:convert';
-import 'package:crypto/crypto.dart';
+import 'package:bcrypt/bcrypt.dart';
 
 class RegisterScreen extends StatefulWidget {
   final Function() onSignInTap;
@@ -51,7 +50,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
       final User? user = userCredential.user;
 
-      final String hashedPassword = hashPassword(password);
+      final String hashedPassword = BCrypt.hashpw(password, BCrypt.gensalt());
 
       if (user != null) {
         await FirebaseAuth.instance.currentUser!.updateDisplayName(name);
@@ -87,7 +86,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
   }
 
   String hashPassword(String password) {
-    return sha256.convert(utf8.encode(password)).toString();
+    return BCrypt.hashpw(password, BCrypt.gensalt());
   }
 
   //  LOGIN GOOGLE

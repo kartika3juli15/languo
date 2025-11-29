@@ -1,19 +1,40 @@
-import 'dart:io';
+import 'dart:typed_data';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
+import 'package:flutter/material.dart';
 
 class SakitService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseStorage _storage = FirebaseStorage.instance;
 
-  /// Upload foto/lampiran ke Firebase Storage
-  Future<String> uploadLampiran(File file) async {
-    String fileName = "${DateTime.now().millisecondsSinceEpoch}.jpg";
-    final ref = _storage.ref().child("lampiran_sakit/$fileName");
+  Future<Map<String, String>> uploadLampiran({
+    required Uint8List bytes,
+    required String fileName,
+    required String userId,
+  }) async {
+    final timestamp = DateTime.now().millisecondsSinceEpoch;
+    // Sanitasi nama file agar aman
+    final cleanFileName = fileName.replaceAll(" ", "_");
 
-    await ref.putFile(file);
+    final storagePath = 'sakit_lampiran/$userId/${timestamp}_$cleanFileName';
+    final ref = _storage.ref().child(storagePath);
 
-    return await ref.getDownloadURL();
+    try {
+      final metadata = SettableMetadata(
+        contentType: "image/jpeg",
+      );
+
+      await ref.putData(bytes, metadata);
+      final url = await ref.getDownloadURL();
+
+      return {
+        'lampiranUrl': url,
+        'storagePath': storagePath,
+      };
+    } on FirebaseException catch (e) {
+      debugPrint("Firebase Storage Upload Error: ${e.code} - ${e.message}");
+      rethrow;
+    }
   }
 
   /// Kirim pengajuan sakit ke Firestore
@@ -22,21 +43,34 @@ class SakitService {
     required DateTime startDate,
     required DateTime endDate,
     required String keterangan,
-    required File lampiran,
+    required Uint8List lampiranBytes,
+    required String fileName,
   }) async {
-    // Upload gambar ke Storage
-    String urlLampiran = await uploadLampiran(lampiran);
+    try {
+      final uploadResult = await uploadLampiran(
+        bytes: lampiranBytes,
+        fileName: fileName,
+        userId: userId,
+      );
 
-    // Simpan ke Firestore → konsisten pakai "pengajuan_sakit"
-    await _firestore.collection("pengajuan_sakit").add({
-      "userId": userId,
-      "tanggalMulai": Timestamp.fromDate(startDate),
-      "tanggalSelesai": Timestamp.fromDate(endDate),
-      "keterangan": keterangan,
-      "lampiranUrl": urlLampiran,
-      "status": "Proses",
-      "createdAt": FieldValue.serverTimestamp(),
-    });
+      await _firestore.collection("pengajuan_sakit").add({
+        "userId": userId,
+        "tanggalMulai": Timestamp.fromDate(startDate),
+        "tanggalSelesai": Timestamp.fromDate(endDate),
+        "keterangan": keterangan,
+        "lampiranUrl": uploadResult['lampiranUrl'],
+        "storagePath":
+            uploadResult['storagePath'],
+        "status": "Diajukan",
+        "createdAt": FieldValue.serverTimestamp(),
+      });
+    } on FirebaseException catch (e) {
+      debugPrint("Firebase Kirim Pengajuan Error: ${e.code} - ${e.message}");
+      rethrow;
+    } catch (e) {
+      debugPrint("General Error in kirimPengajuan: $e");
+      rethrow;
+    }
   }
 
   /// Ambil rekapan sakit berdasarkan user

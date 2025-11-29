@@ -33,5 +33,19 @@ service cloud.firestore {
         // Izinkan user menulis/mengupdate data mereka sendiri (saat registrasi/update profil)
         allow write: if request.auth.uid == userId; 
     }
+
+    // ==========================================================
+    // ATURAN KOLEKSI PENGAJUAN SAKIT (BARU DITAMBAHKAN)
+    // ==========================================================
+    match /pengajuan_sakit/{pengajuanId} {
+        // Izinkan user yang login untuk membaca pengajuan mereka sendiri
+        allow read: if request.auth != null && request.auth.uid == resource.data.userId;
+        
+        // Izinkan user yang login untuk membuat pengajuan baru (create)
+        allow create: if request.auth != null && request.auth.uid == request.resource.data.userId;
+        
+        // Izinkan user yang login untuk mengupdate atau menghapus pengajuan mereka sendiri
+        allow update, delete: if request.auth != null && request.auth.uid == resource.data.userId;
+    }
   }
 }

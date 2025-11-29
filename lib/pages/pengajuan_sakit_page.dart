@@ -1,5 +1,5 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../services/sakit_service.dart';
@@ -18,7 +18,7 @@ class _PengajuanSakitPageState extends State<PengajuanSakitPage> {
   int selectedTab = 0;
   DateTime? startDate;
   DateTime? endDate;
-  File? lampiran;
+  XFile? lampiranXFile;
   final picker = ImagePicker();
   final TextEditingController keteranganController = TextEditingController();
 
@@ -45,7 +45,7 @@ class _PengajuanSakitPageState extends State<PengajuanSakitPage> {
   Future<void> pickLampiran() async {
     final img = await picker.pickImage(source: ImageSource.gallery);
     if (img != null) {
-      setState(() => lampiran = File(img.path));
+      setState(() => lampiranXFile = img);
     }
   }
 
@@ -56,7 +56,8 @@ class _PengajuanSakitPageState extends State<PengajuanSakitPage> {
     if (startDate == null || endDate == null) {
       return _showMessage("Tanggal belum dipilih");
     }
-    if (lampiran == null) {
+    // Cek XFile yang baru
+    if (lampiranXFile == null) {
       return _showMessage("Lampiran belum diupload");
     }
     if (keteranganController.text.isEmpty) {
@@ -66,12 +67,16 @@ class _PengajuanSakitPageState extends State<PengajuanSakitPage> {
     try {
       String userId = _auth.currentUser?.uid ?? "unknown";
 
+      final Uint8List lampiranBytes = await lampiranXFile!.readAsBytes();
+      final String fileName = lampiranXFile!.name; // Ambil nama file
+
       await _sakitService.kirimPengajuan(
         userId: userId,
         startDate: startDate!,
         endDate: endDate!,
         keterangan: keteranganController.text,
-        lampiran: lampiran!,
+        lampiranBytes: lampiranBytes,
+        fileName: fileName,
       );
 
       _showMessage("Pengajuan Sakit Berhasil Dikirim!");
@@ -79,13 +84,22 @@ class _PengajuanSakitPageState extends State<PengajuanSakitPage> {
       setState(() {
         startDate = null;
         endDate = null;
-        lampiran = null;
+        lampiranXFile = null;
         keteranganController.clear();
       });
     } catch (e) {
-      _showMessage("Gagal mengirim pengajuan: $e");
+      // REVISI: Tampilkan error yang lebih spesifik di snackbar
+      print("Error submitForm: $e");
+      String errorMessage = e.toString().contains("firebase_storage")
+          ? "Gagal upload lampiran."
+          : e.toString().contains("PERMISSION_DENIED")
+              ? "Gagal mengirim: Izin ditolak (Security Rules)."
+              : "Gagal mengirim pengajuan: $e";
+
+      _showMessage(errorMessage);
     }
   }
+  // ---------------------------------------------------------------------------------
 
   void _showMessage(String msg) {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
@@ -280,8 +294,11 @@ class _PengajuanSakitPageState extends State<PengajuanSakitPage> {
                 borderRadius: BorderRadius.circular(10),
               ),
               child: Center(
+                // --- BAGIAN 4: Cek status variabel baru (lampiranXFile) ---
                 child: Text(
-                  lampiran == null ? "Upload Lampiran" : "Lampiran Terpilih",
+                  lampiranXFile == null
+                      ? "Upload Lampiran"
+                      : "Lampiran Terpilih",
                   style: const TextStyle(
                       color: Colors.white, fontWeight: FontWeight.w600),
                 ),

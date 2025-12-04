@@ -6,7 +6,7 @@ import 'package:languo/users/pengajuan/sakit_page.dart';
 import 'package:languo/admin/PengajuanCutiPage.dart';
 import 'package:languo/admin/PengajuanIzinPage.dart';
 import '../models/user_model.dart';
-import 'profile_page.dart';
+import '../profile/profile_page.dart';
 import 'rekapan/cuti_page.dart';
 import 'rekapan/izin_page.dart';
 import 'rekapan/sakit_page.dart';

@@ -1,86 +1,85 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/absensi_model.dart';
-import '../models/user_model.dart'; 
-import '../models/qr_code_model.dart'; 
+import '../models/user_model.dart';
+import '../models/qr_code_model.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 class FirestoreService {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
 
   // ==========================================================
-  // 1. FUNGSI ABSENSI (DIPAKAI TIM 2 & 4)
+  // FUNGSI ABSENSI
   // ==========================================================
-  
-  // TELAH DIMODIFIKASI: HANYA MENGAMBIL scannedUserId
-  Future<void> recordAbsensi(int scannedUserId) async {
+
+  Future<void> recordAbsensi(String scannedUserUid) async {
     final User? currentUser = FirebaseAuth.instance.currentUser;
-      if (currentUser == null) {
-        throw Exception('Operator tidak terautentikasi.');
+    if (currentUser == null) {
+      throw Exception('Operator tidak terautentikasi.');
     }
 
-    // --- LOGIKA WAKTU (Check-in/Check-out Otomatis 18:00) ---
-    final checkInTime = DateTime.now(); // Waktu scan aktual
+    // Waktu datang
+    final now = DateTime.now();
 
+    // Jam keluar otomatis 18:00
     final checkOutTargetTime = DateTime(
-      checkInTime.year,
-      checkInTime.month,
-      checkInTime.day,
-      18, // Jam 18:00
+      now.year,
+      now.month,
+      now.day,
+      18,
       0,
       0,
     );
-    final finalCheckOutTime = checkOutTargetTime;
 
-    // --- END LOGIKA WAKTU ---
+    // Buat dokumen AbsensiModel
+    final newDoc = _db.collection("absensi").doc(); // auto generate ID
 
     final absensiData = AbsensiModel(
-      userId: scannedUserId,
-      // qrId: scannedQrId, <-- TELAH DIHAPUS
-      operatorUid: currentUser.uid,
-      checkInTime: Timestamp.fromDate(checkInTime), 
-      checkOutTime: Timestamp.fromDate(finalCheckOutTime), 
-      status: 'check_in', 
-      absensiStatus: 'Valid', 
+      uid: newDoc.id, // document ID Firestore
+      userId: scannedUserUid, // UID Users
+      operatorUid: currentUser.uid, // UID operator
+      checkInTime: now, // jam masuk sekarang
+      checkOutTime: checkOutTargetTime, // jam pulang otomatis
+      status: "check_in",
+      absensiStatus: "valid",
     );
 
-    final docId = absensiData.documentId;
-
     try {
-      await _db.collection('absensi').doc(docId).set(absensiData.toMap());
-      print('Absensi berhasil dicatat: $docId');
-
-    } on FirebaseException catch (e) {
-      if (e.code == 'permission-denied') {
-        throw Exception('Gagal mencatat: Peserta sudah melakukan absensi (Duplikat).');
-      }
-      throw Exception('Gagal mencatat absensi: ${e.message}');
+      await newDoc.set(absensiData.toMap());
+      print("Absensi berhasil dicatat: ${newDoc.id}");
     } catch (e) {
-      rethrow;
+      throw Exception("Gagal mencatat absensi: $e");
     }
-}
+  }
 
-  // MENGAMBIL ABSENSI HARI INI (BARU)
-  Future<AbsensiModel?> getTodayAbsensi(int userId) async {
+  // GET ABSENSI HARI INI untuk user tertentu
+  Future<AbsensiModel?> getTodayAbsensi(String userUid) async {
     try {
-        final today = DateTime.now();
-        // Membentuk Document ID berdasarkan tanggal hari ini (USER_ID_YYYYMMDD)
-        final dateString = '${today.year}${today.month.toString().padLeft(2, '0')}${today.day.toString().padLeft(2, '0')}';
-        final docId = '${userId}_$dateString';
+      final now = DateTime.now();
+      final start = DateTime(now.year, now.month, now.day, 0, 0, 0);
+      final end = DateTime(now.year, now.month, now.day, 23, 59, 59);
 
-        final doc = await _db.collection('absensi').doc(docId).get();
+      final query = await _db
+          .collection('absensi')
+          .where('user_id', isEqualTo: userUid)
+          .where('check_in_time',
+              isGreaterThanOrEqualTo: Timestamp.fromDate(start))
+          .where('check_in_time', isLessThanOrEqualTo: Timestamp.fromDate(end))
+          .limit(1)
+          .get();
 
-        if (doc.exists) {
-            return AbsensiModel.fromMap(doc.data()!, doc.id);
-        }
-        return null;
+      if (query.docs.isNotEmpty) {
+        final doc = query.docs.first;
+        return AbsensiModel.fromFirestore(doc);
+      }
+      return null;
     } catch (e) {
-        print('Error getting today absensi: $e');
-        return null;
+      print('Error getting today absensi: $e');
+      return null;
     }
   }
 
   // ==========================================================
-  // 2. FUNGSI USERS (DIPAKAI TIM 1 & 4)
+  // FUNGSI USERS
   // ==========================================================
 
   Future<void> saveUserData(UserModel user) async {
@@ -90,7 +89,7 @@ class FirestoreService {
       print('Error saving user data: $e');
       rethrow;
     }
-}
+  }
 
   Future<String?> getUserRole(String uid) async {
     try {
@@ -105,29 +104,21 @@ class FirestoreService {
     }
   }
 
-  // MENDAPATKAN USER BERDASARKAN USER_ID (BARU)
-  Future<UserModel?> getUserDataByUserId(int userId) async {
+  Future<UserModel?> getUserDataByUid(String uid) async {
     try {
-      final querySnapshot = await _db
-          .collection('users')
-          .where('user_id', isEqualTo: userId)
-          .limit(1)
-          .get();
-
-      if (querySnapshot.docs.isNotEmpty) {
-        final doc = querySnapshot.docs.first;
-        // Mengirim data map dan UID Firebase (doc.id)
+      final doc = await _db.collection('users').doc(uid).get();
+      if (doc.exists) {
         return UserModel.fromFirestore(doc);
       }
       return null;
     } catch (e) {
-      print('Error getting user data by user ID: $e');
+      print('Error getting user data by uid: $e');
       return null;
     }
   }
 
   // ==========================================================
-  // 3. FUNGSI QR CODE (DIPAKAI TIM 2 - VALIDASI AWAL)
+  // FUNGSI QR CODE
   // ==========================================================
 
   Future<QRCodeModel?> verifyQRCodeValue(String qrValue) async {

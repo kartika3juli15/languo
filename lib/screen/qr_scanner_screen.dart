@@ -52,7 +52,7 @@ class _QRScannerPageState extends State<QRScannerPage> {
     setState(() {
       _barcodeRect = null;
     });
-    
+
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -127,7 +127,8 @@ class _QRScannerPageState extends State<QRScannerPage> {
       context: context,
       builder: (_) => AlertDialog(
         title: const Text("Izin Kamera Diperlukan"),
-        content: const Text("Aplikasi memerlukan akses kamera untuk memindai QR."),
+        content:
+            const Text("Aplikasi memerlukan akses kamera untuk memindai QR."),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
@@ -176,7 +177,7 @@ class _QRScannerPageState extends State<QRScannerPage> {
             // Update posisi dan ukuran kotak sesuai barcode
             if (barcode.corners != null && barcode.corners!.isNotEmpty) {
               final corners = barcode.corners!;
-              
+
               double minX = corners[0].dx;
               double maxX = corners[0].dx;
               double minY = corners[0].dy;
@@ -294,7 +295,8 @@ class _QRScannerPageState extends State<QRScannerPage> {
                 child: Align(
                   alignment: Alignment.centerLeft,
                   child: IconButton(
-                    icon: const Icon(Icons.arrow_back, color: Colors.white, size: 28),
+                    icon: const Icon(Icons.arrow_back,
+                        color: Colors.white, size: 28),
                     onPressed: () => Navigator.pop(context),
                   ),
                 ),
@@ -378,7 +380,8 @@ class _QRScannerPageState extends State<QRScannerPage> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          const Icon(Icons.camera_alt_outlined, size: 80, color: Colors.white54),
+          const Icon(Icons.camera_alt_outlined,
+              size: 80, color: Colors.white54),
           const SizedBox(height: 20),
           const Text(
             "Izin Kamera Ditolak",

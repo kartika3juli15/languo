@@ -6,7 +6,7 @@ import '../../screen/edit_profile.dart';
 import '../../routes/routes_manager.dart';
 import '../../screen/qr_scanner_screen.dart';
 import '../users/karyawan/home_page.dart';
-import '../users/murid/home_page.dart';
+import '../users/dosen/home_page.dart';
 import '../admin/home_page.dart';
 import 'notifikasi_page.dart';
 import 'pengaturan_page.dart';
@@ -325,8 +325,8 @@ class ProfilePage extends StatelessWidget {
         return const HomeKaryawan();
       case "Admin":
         return const HomeAdmin();
-      case "Murid":
-        return const HomeMurid();
+      case "Dosen":
+        return const HomeDosen();
       default:
         return const HomeKaryawan();
     }

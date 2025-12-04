@@ -11,15 +11,16 @@ import 'package:languo/users/pengajuan/izin_page.dart';
 import 'package:languo/users/rekapan/izin_page.dart';
 import '../karyawan/home_page.dart';
 import '../../admin/home_page.dart';
+import 'package:languo/users/pengajuan/cuti_page.dart';
 
-class HomeMurid extends StatefulWidget {
-  const HomeMurid({super.key});
+class HomeDosen extends StatefulWidget {
+  const HomeDosen({super.key});
 
   @override
-  State<HomeMurid> createState() => _HomeMuridState();
+  State<HomeDosen> createState() => _HomeDosenState();
 }
 
-class _HomeMuridState extends State<HomeMurid> {
+class _HomeDosenState extends State<HomeDosen> {
   String? _lastScannedData;
 
   Future<void> checkUserRole() async {
@@ -37,7 +38,7 @@ class _HomeMuridState extends State<HomeMurid> {
 
     if (!mounted) return;
 
-    if (role != "Murid") {
+    if (role != "Dosen") {
       if (role == "Karyawan") {
         Navigator.pushReplacement(
           context,
@@ -416,6 +417,14 @@ class _HomeMuridState extends State<HomeMurid> {
             ],
           ),
         ),
+
+        // CUTI
+        _menuButton(Icons.schedule, "Cuti", () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const PengajuanCutiPage()),
+          );
+        }),
       ],
     );
   }

@@ -10,7 +10,7 @@ import 'package:languo/users/pengajuan/cuti_page.dart';
 import 'package:languo/users/pengajuan/izin_page.dart';
 import 'package:languo/users/pengajuan/sakit_page.dart';
 import 'package:languo/users/rekapan/izin_page.dart';
-import '../murid/home_page.dart';
+import '../dosen/home_page.dart';
 import '../../admin/home_page.dart';
 
 class HomeKaryawan extends StatefulWidget {
@@ -39,10 +39,10 @@ class _HomeKaryawanState extends State<HomeKaryawan> {
     if (!mounted) return;
 
     if (role != "Karyawan") {
-      if (role == "Murid") {
+      if (role == "Dosen") {
         Navigator.pushReplacement(
           context,
-          MaterialPageRoute(builder: (_) => const HomeMurid()),
+          MaterialPageRoute(builder: (_) => const HomeDosen()),
         );
       } else if (role == "Admin") {
         Navigator.pushReplacement(

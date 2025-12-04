@@ -39,7 +39,7 @@ class AuthProvider with ChangeNotifier {
           'user_id': uid,
           'user_name': enteredName, // Input dari register form
           'user_email': enteredEmail,
-          'user_role': 'Murid', // default role
+          'user_role': 'Dosen', // default role
           'user_photo': null,
           'created_at': Timestamp.now(),
         });

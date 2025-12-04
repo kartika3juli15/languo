@@ -5,7 +5,7 @@ import '../screen/login_screen.dart';
 import '../screen/register_screen.dart';
 import '../admin/home_page.dart';
 import '../users/karyawan/home_page.dart';
-import '../users/murid/home_page.dart';
+import '../users/dosen/home_page.dart';
 
 class AuthPage extends StatefulWidget {
   const AuthPage({super.key});
@@ -57,8 +57,8 @@ class _AuthPageState extends State<AuthPage> {
                 return const HomeAdmin();
               } else if (role == "Karyawan") {
                 return const HomeKaryawan();
-              } else if (role == "Murid") {
-                return const HomeMurid();
+              } else if (role == "Dosen") {
+                return const HomeDosen();
               } else  {
                 return const Scaffold(
                   body: Center(child: Text("Role tidak dikenali")),

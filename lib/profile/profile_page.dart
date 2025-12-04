@@ -9,7 +9,6 @@ import '../users/karyawan/home_page.dart';
 import '../users/dosen/home_page.dart';
 import '../admin/home_page.dart';
 import 'notifikasi_page.dart';
-import 'pengaturan_page.dart';
 import 'faq_page.dart';
 
 class ProfilePage extends StatelessWidget {
@@ -203,18 +202,6 @@ class ProfilePage extends StatelessWidget {
                           context,
                           MaterialPageRoute(
                               builder: (_) => const NotifikasiPage()),
-                        );
-                      },
-                    ),
-
-                    _menuItem(
-                      Icons.settings_outlined,
-                      "Pengaturan",
-                      () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                              builder: (_) => const PengaturanPage()),
                         );
                       },
                     ),

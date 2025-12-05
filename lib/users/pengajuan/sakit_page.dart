@@ -82,10 +82,6 @@ class _PengajuanSakitPageState extends State<PengajuanSakitPage> {
       _showMessage("Lampiran belum diupload");
       return false;
     }
-    if (keteranganController.text.isEmpty) {
-      _showMessage("Keterangan masih kosong");
-      return false;
-    }
     return true;
   }
 
@@ -232,8 +228,6 @@ class _PengajuanSakitPageState extends State<PengajuanSakitPage> {
     );
   }
 
-  // ======================== KIRIM DATA (RETURN BOOL) ========================
-  /// melakukan upload & simpan. Mengembalikan true jika berhasil, false jika gagal.
   Future<bool> submitForm() async {
     if (startDate == null || endDate == null) {
       _showMessage("Tanggal belum dipilih");
@@ -241,10 +235,6 @@ class _PengajuanSakitPageState extends State<PengajuanSakitPage> {
     }
     if (lampiranBytes == null || lampiranName == null) {
       _showMessage("Lampiran belum diupload");
-      return false;
-    }
-    if (keteranganController.text.isEmpty) {
-      _showMessage("Keterangan masih kosong");
       return false;
     }
 

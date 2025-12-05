@@ -47,7 +47,7 @@ class SakitService {
     required String userId,
     required DateTime startDate,
     required DateTime endDate,
-    required String keterangan,
+    String? keterangan,
     Uint8List? lampiranBytes,
     String? fileName,
   }) async {

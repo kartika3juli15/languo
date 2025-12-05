@@ -5,7 +5,7 @@ class UserModel {
   final String userName;
   final String userEmail;
   final String userRole;
-  final String? userPhoto;
+  String? userPhoto;
   final String? userPass;
   final num sisaCuti;
 

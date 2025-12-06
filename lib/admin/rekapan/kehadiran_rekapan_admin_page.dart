@@ -23,24 +23,36 @@ class _AdminKehadiranPageState extends State<AdminKehadiranPage> {
   Stream<QuerySnapshot> usersStream(String coll) =>
       _firestore.collection(coll).snapshots();
 
-  Stream<QuerySnapshot> absensiStream() => _firestore
-      .collection('absensi')
-      .orderBy('date', descending: true)
-      .snapshots();
+  Stream<QuerySnapshot> absensiStream() {
+    try {
+      return _firestore
+          .collection('absensi')
+          .orderBy('date', descending: true)
+          .snapshots();
+    } catch (e) {
+      // Jika orderBy error (missing index), fallback tanpa orderBy
+      debugPrint('Error orderBy absensi: $e');
+      return _firestore.collection('absensi').snapshots();
+    }
+  }
 
   // format tanggal display
   String _formatDisplayDate(dynamic firestoreDate) {
     try {
       DateTime dt;
-      if (firestoreDate is Timestamp)
+      if (firestoreDate is Timestamp) {
         dt = firestoreDate.toDate();
-      else if (firestoreDate is String)
+      } else if (firestoreDate is String) {
         dt = DateTime.parse(firestoreDate);
-      else
+      } else if (firestoreDate == null) {
+        return 'Tanggal tidak tersedia';
+      } else {
         return firestoreDate.toString();
+      }
       return DateFormat('EEE, dd MMM yyyy', 'id').format(dt);
     } catch (e) {
-      return firestoreDate.toString();
+      debugPrint('Error format date: $e');
+      return firestoreDate?.toString() ?? 'Tanggal tidak valid';
     }
   }
 
@@ -56,11 +68,24 @@ class _AdminKehadiranPageState extends State<AdminKehadiranPage> {
 
   // delete absensi doc
   Future<void> _deleteAbsensi(String docId) async {
-    await _firestore.collection('absensi').doc(docId).delete();
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-          content: Text('Data absensi dihapus'), backgroundColor: Colors.green),
-    );
+    try {
+      await _firestore.collection('absensi').doc(docId).delete();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+              content: Text('Data absensi berhasil dihapus'),
+              backgroundColor: Colors.green),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+              content: Text('Gagal menghapus data: $e'),
+              backgroundColor: Colors.red),
+        );
+      }
+    }
   }
 
   // confirm delete
@@ -262,17 +287,52 @@ class _AdminKehadiranPageState extends State<AdminKehadiranPage> {
       stream: usersStream(selectedCollection),
       builder: (context, usersSnapshot) {
         if (usersSnapshot.hasError) {
-          return Center(child: Text('Error: ${usersSnapshot.error}'));
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.error_outline, size: 64, color: Colors.red),
+                const SizedBox(height: 16),
+                Text('Error: ${usersSnapshot.error}'),
+                const SizedBox(height: 8),
+                ElevatedButton(
+                  onPressed: () => setState(() {}),
+                  child: const Text('Coba Lagi'),
+                ),
+              ],
+            ),
+          );
         }
         if (!usersSnapshot.hasData) {
           return const Center(child: CircularProgressIndicator());
         }
 
         final usersDocs = usersSnapshot.data!.docs;
+        
+        // Debug: print jumlah user
+        debugPrint('Total ${selectedTabLabel}: ${usersDocs.length}');
+        
         // map userId -> userData
         final Map<String, Map<String, dynamic>> usersMap = {};
         for (var u in usersDocs) {
-          usersMap[u.id] = u.data() as Map<String, dynamic>;
+          final data = u.data() as Map<String, dynamic>;
+          usersMap[u.id] = data;
+          // Debug: print user info
+          debugPrint('User ${u.id}: ${data['nama'] ?? data['name'] ?? 'No name'}');
+        }
+
+        if (usersMap.isEmpty) {
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.people_outline, size: 64, color: Colors.grey[400]),
+                const SizedBox(height: 16),
+                Text('Tidak ada data $selectedTabLabel',
+                    style: TextStyle(fontSize: 16, color: Colors.grey[600])),
+              ],
+            ),
+          );
         }
 
         // now listen to absensi
@@ -280,27 +340,55 @@ class _AdminKehadiranPageState extends State<AdminKehadiranPage> {
           stream: absensiStream(),
           builder: (context, absSnapshot) {
             if (absSnapshot.hasError) {
-              return Center(child: Text('Error: ${absSnapshot.error}'));
+              return Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(Icons.error_outline, size: 64, color: Colors.red),
+                    const SizedBox(height: 16),
+                    Text('Error absensi: ${absSnapshot.error}'),
+                    const SizedBox(height: 8),
+                    const Text(
+                      'Pastikan Firestore index sudah dibuat',
+                      style: TextStyle(fontSize: 12, color: Colors.grey),
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
+                ),
+              );
             }
             if (!absSnapshot.hasData) {
               return const Center(child: CircularProgressIndicator());
             }
 
             final absDocs = absSnapshot.data!.docs;
+            
+            // Debug: print jumlah absensi
+            debugPrint('Total absensi records: ${absDocs.length}');
 
             // build list of combined entries where abs.user_id exists in usersMap
             final List<_CombinedEntry> combined = [];
 
             for (var a in absDocs) {
               final aData = a.data() as Map<String, dynamic>;
-              final userId = (aData['user_id'] ?? '').toString();
-              if (userId.isEmpty) continue;
-              if (!usersMap.containsKey(userId))
+              final userId = (aData['user_id'] ?? '').toString().trim();
+              
+              // Debug: print absensi info
+              debugPrint('Absensi ${a.id}: user_id=$userId');
+              
+              if (userId.isEmpty) {
+                debugPrint('  -> Skipped: user_id kosong');
+                continue;
+              }
+              
+              if (!usersMap.containsKey(userId)) {
+                debugPrint('  -> Skipped: user_id tidak ditemukan di $selectedCollection');
                 continue; // skip absensi not for this role
+              }
 
               final user = usersMap[userId]!;
-              final nama = (user['nama'] ?? user['name'] ?? '').toString();
-              final email = (user['email'] ?? '').toString();
+              final nama = (user['nama'] ?? user['name'] ?? 'Tanpa Nama').toString();
+              final email = (user['email'] ?? 'Tanpa Email').toString();
 
               // read fields from absensi
               final checkIn = (aData['check_in'] ?? '').toString();
@@ -312,7 +400,12 @@ class _AdminKehadiranPageState extends State<AdminKehadiranPage> {
 
               // search filter
               final query = searchController.text.trim();
-              if (!_matchesSearch(query, nama, email)) continue;
+              if (!_matchesSearch(query, nama, email)) {
+                debugPrint('  -> Skipped: tidak cocok dengan search query');
+                continue;
+              }
+
+              debugPrint('  -> Added to list: $nama');
 
               combined.add(_CombinedEntry(
                 absId: a.id,
@@ -327,6 +420,8 @@ class _AdminKehadiranPageState extends State<AdminKehadiranPage> {
               ));
             }
 
+            debugPrint('Total combined entries for $selectedTabLabel: ${combined.length}');
+
             if (combined.isEmpty) {
               return Center(
                 child: Column(
@@ -334,9 +429,15 @@ class _AdminKehadiranPageState extends State<AdminKehadiranPage> {
                   children: [
                     Icon(Icons.search_off, size: 64, color: Colors.grey[400]),
                     const SizedBox(height: 16),
-                    Text('Tidak ada data ditemukan',
-                        style:
-                            TextStyle(fontSize: 16, color: Colors.grey[600])),
+                    Text('Tidak ada data kehadiran $selectedTabLabel',
+                        style: TextStyle(fontSize: 16, color: Colors.grey[600])),
+                    const SizedBox(height: 8),
+                    Text(
+                      searchController.text.isNotEmpty
+                          ? 'Coba kata kunci pencarian lain'
+                          : 'Belum ada data absensi untuk $selectedTabLabel',
+                      style: TextStyle(fontSize: 12, color: Colors.grey[500]),
+                    ),
                   ],
                 ),
               );

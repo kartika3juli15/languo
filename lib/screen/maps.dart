@@ -13,69 +13,101 @@ class MapsPage extends StatefulWidget {
 class _MapsPageState extends State<MapsPage> {
   Completer<GoogleMapController> _controller = Completer();
 
-  static const LatLng pusatAbsensi = LatLng(-7.98455, 112.62085);
+  /// TITIK KANTOR (GANTI SESUAI KEBUTUHAN)
+  final LatLng kantorPos = const LatLng(-7.9797, 112.6304); // contoh Malang
 
-  LatLng? userPosition;
-  double distanceInMeters = 0.0;
-  bool isWithinRadius = false;
+  Position? currentPosition;
+  double? distanceMeter;
+  bool loading = true;
 
   @override
   void initState() {
     super.initState();
-    _checkPermission();
+    _cekGpsDanLokasi();
   }
 
-  Future<void> _checkPermission() async {
+  /// =====================================================
+  /// CEK IZIN GPS + DAPATKAN POSISI DEVICE
+  /// =====================================================
+  Future<void> _cekGpsDanLokasi() async {
     bool serviceEnabled;
     LocationPermission permission;
 
+    // Cek GPS aktif
     serviceEnabled = await Geolocator.isLocationServiceEnabled();
-    if (!serviceEnabled) return;
+    if (!serviceEnabled) {
+      await Geolocator.openLocationSettings();
+    }
 
+    // Cek hak akses lokasi
     permission = await Geolocator.checkPermission();
     if (permission == LocationPermission.denied) {
       permission = await Geolocator.requestPermission();
-      if (permission == LocationPermission.denied) return;
+      if (permission == LocationPermission.denied) {
+        setState(() => loading = false);
+        return;
+      }
     }
 
-    if (permission == LocationPermission.deniedForever) return;
+    if (permission == LocationPermission.deniedForever) {
+      setState(() => loading = false);
+      return;
+    }
 
-    _getUserLocation();
-  }
-
-  Future<void> _getUserLocation() async {
-    Position position = await Geolocator.getCurrentPosition(
+    // Ambil lokasi sekarang
+    final pos = await Geolocator.getCurrentPosition(
       desiredAccuracy: LocationAccuracy.high,
     );
 
-    setState(() {
-      userPosition = LatLng(position.latitude, position.longitude);
-    });
-
-    _calculateDistance();
-  }
-
-  void _calculateDistance() {
-    if (userPosition == null) return;
-
-    distanceInMeters = Geolocator.distanceBetween(
-      userPosition!.latitude,
-      userPosition!.longitude,
-      pusatAbsensi.latitude,
-      pusatAbsensi.longitude,
+    // Hitung jarak
+    double jarak = Geolocator.distanceBetween(
+      pos.latitude,
+      pos.longitude,
+      kantorPos.latitude,
+      kantorPos.longitude,
     );
 
-    isWithinRadius = distanceInMeters <= 100;
-    setState(() {});
-
-    // KIRIM RESULT OTOMATIS
-    Future.delayed(const Duration(seconds: 1), () {
-      Navigator.pop(context, isWithinRadius);
+    setState(() {
+      currentPosition = pos;
+      distanceMeter = jarak;
+      loading = false;
     });
+  }
+
+  /// =====================================================
+  /// VALIDASI RADIUS (100 Meter)
+  /// =====================================================
+  bool get isDalamRadius {
+    if (distanceMeter == null) return false;
+    return distanceMeter! <= 100;
+  }
+
+  /// =====================================================
+  /// KIRIM NILAI KEHALAMAN KEHADIRAN
+  /// =====================================================
+  void _kirimResult() {
+    Navigator.pop(context, isDalamRadius);
   }
 
   @override
   Widget build(BuildContext context) {
+    if (loading) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    if (currentPosition == null) {
+      return const Scaffold(
+        body: Center(child: Text("Lokasi tidak tersedia")),
+      );
+    }
+
+    final posisiUser = LatLng(
+      currentPosition!.latitude,
+      currentPosition!.longitude,
+    );
+
     return Scaffold(
       appBar: AppBar(
         title: const Text(
@@ -91,82 +123,97 @@ class _MapsPageState extends State<MapsPage> {
           color: Colors.white, // ← panah back putih
         ),
       ),
-      body: userPosition == null
-          ? const Center(child: CircularProgressIndicator())
-          : Stack(
-              children: [
-                GoogleMap(
-                  initialCameraPosition: CameraPosition(
-                    target: userPosition!,
-                    zoom: 17,
+      body: Stack(
+        children: [
+          GoogleMap(
+            initialCameraPosition: CameraPosition(
+              target: posisiUser,
+              zoom: 17,
+            ),
+            markers: {
+              Marker(
+                markerId: const MarkerId("posisi"),
+                position: posisiUser,
+                infoWindow: const InfoWindow(title: "Posisi Anda"),
+              ),
+              Marker(
+                markerId: const MarkerId("kantor"),
+                position: kantorPos,
+                infoWindow: const InfoWindow(title: "Kantor"),
+              )
+            },
+            circles: {
+              Circle(
+                circleId: const CircleId("radius"),
+                center: kantorPos,
+                radius: 100, // 👉 100 METER
+                strokeColor: Colors.blue,
+                strokeWidth: 2,
+                fillColor: Colors.blue.withOpacity(0.2),
+              )
+            },
+            onMapCreated: (ctr) => _controller.complete(ctr),
+            myLocationEnabled: true,
+            myLocationButtonEnabled: true,
+          ),
+
+          /// =====================================================
+          /// INFO PANEL
+          /// =====================================================
+          Positioned(
+            bottom: 20,
+            left: 20,
+            right: 20,
+            child: Container(
+              padding: const EdgeInsets.all(18),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(18),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.15),
+                    blurRadius: 8,
+                    offset: const Offset(0, 3),
+                  )
+                ],
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    "Jarak ke kantor : ${distanceMeter!.toStringAsFixed(2)} m",
+                    style: const TextStyle(
+                        fontSize: 16, fontWeight: FontWeight.bold),
                   ),
-                  myLocationEnabled: true,
-                  markers: {
-                    Marker(
-                      markerId: const MarkerId("pusat_absensi"),
-                      position: pusatAbsensi,
-                      infoWindow: const InfoWindow(title: "Pusat Absensi"),
-                    ),
-                    Marker(
-                      markerId: const MarkerId("user"),
-                      position: userPosition!,
-                      infoWindow: const InfoWindow(title: "Lokasi Anda"),
-                      icon: BitmapDescriptor.defaultMarkerWithHue(
-                        BitmapDescriptor.hueAzure,
+                  const SizedBox(height: 14),
+                  SizedBox(
+                    width: double.infinity,
+                    height: 48,
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor:
+                            isDalamRadius ? Colors.green : Colors.red,
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12)),
+                      ),
+                      onPressed: _kirimResult,
+                      child: Text(
+                        isDalamRadius
+                            ? "DALAM RADIUS – LANJUT CHECK OUT"
+                            : "DI LUAR RADIUS – TIDAK BISA CHECK OUT",
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
                     ),
-                  },
-                  circles: {
-                    Circle(
-                      circleId: const CircleId("radius_absensi"),
-                      center: pusatAbsensi,
-                      radius: 100,
-                      strokeWidth: 2,
-                      strokeColor: Colors.blue,
-                      fillColor: Colors.blue.withOpacity(0.1),
-                    ),
-                  },
-                  onMapCreated: (GoogleMapController controller) {
-                    _controller.complete(controller);
-                  },
-                ),
-                Positioned(
-                  top: 20,
-                  left: 20,
-                  right: 20,
-                  child: Container(
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(10),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withOpacity(0.25),
-                          blurRadius: 6,
-                        ),
-                      ],
-                    ),
-                    child: Row(
-                      children: [
-                        const Icon(Icons.location_on, color: Colors.red),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            isWithinRadius
-                                ? "Lokasi valid — dalam radius 100 meter"
-                                : "Lokasi tidak valid — di luar radius",
-                            style: TextStyle(
-                                color:
-                                    isWithinRadius ? Colors.green : Colors.red,
-                                fontWeight: FontWeight.bold),
-                          ),
-                        )
-                      ],
-                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
+          ),
+        ],
+      ),
     );
   }
 }

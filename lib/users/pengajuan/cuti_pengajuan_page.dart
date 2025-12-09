@@ -158,7 +158,7 @@ class _PengajuanCutiPageState extends State<PengajuanCutiPage> {
                         _submitFromButton();
                       },
                       style: ElevatedButton.styleFrom(
-                          backgroundColor: Color(0xFF1666A9)),
+                          backgroundColor: const Color(0xFF1666A9)),
                       child: const Text("Ya",
                           style: TextStyle(color: Colors.white)),
                     ),
@@ -168,7 +168,7 @@ class _PengajuanCutiPageState extends State<PengajuanCutiPage> {
                     child: ElevatedButton(
                       onPressed: () => Navigator.of(dialogContext).pop(),
                       style: ElevatedButton.styleFrom(
-                          backgroundColor: Color(0xFFF05454)),
+                          backgroundColor: const Color(0xFFF05454)),
                       child: const Text("Tidak",
                           style: TextStyle(color: Colors.white)),
                     ),
@@ -374,11 +374,11 @@ class _PengajuanCutiPageState extends State<PengajuanCutiPage> {
 
   Widget _buildTabBar() {
     return Transform.translate(
-      offset: const Offset(0, -30), // tetap untuk efek tab bar naik
+      offset: const Offset(0, -30),
       child: Container(
         height: 55,
         margin: const EdgeInsets.symmetric(horizontal: 20)
-            .copyWith(bottom: 0), // jarak bawah 8px
+            .copyWith(bottom: 0),
         decoration: BoxDecoration(
           color: Colors.grey.shade200,
           borderRadius: BorderRadius.circular(40),

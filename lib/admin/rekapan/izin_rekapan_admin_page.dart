@@ -76,7 +76,7 @@ class _RekapanAdminIzinPageState extends State<RekapanAdminIzinPage> {
           padding: const EdgeInsets.only(top: 10),
           itemCount: filteredDocs.length,
           itemBuilder: (context, index) {
-            return IzinCard(filteredDocs[index], index);
+            return izinCard(filteredDocs[index], index);
           },
         );
       },
@@ -258,7 +258,7 @@ class _RekapanAdminIzinPageState extends State<RekapanAdminIzinPage> {
   // CARD IZIN
   // -------------------------------------------------------------------------
 
-  Widget IzinCard(DocumentSnapshot doc, int index) {
+  Widget izinCard(DocumentSnapshot doc, int index) {
     bool isExpanded = expandedIndex == index;
 
     final data = doc.data() as Map<String, dynamic>;

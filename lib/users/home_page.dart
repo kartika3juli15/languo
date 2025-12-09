@@ -202,7 +202,7 @@ class _HomePageUserState extends State<HomePageUser> {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: Container(
-        padding: EdgeInsets.all(16),
+        padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
           color: Colors.green[50],
           borderRadius: BorderRadius.circular(12),
@@ -210,8 +210,8 @@ class _HomePageUserState extends State<HomePageUser> {
         ),
         child: Row(
           children: [
-            Icon(Icons.check_circle, color: Colors.green, size: 24),
-            SizedBox(width: 12),
+            const Icon(Icons.check_circle, color: Colors.green, size: 24),
+            const SizedBox(width: 12),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -223,7 +223,7 @@ class _HomePageUserState extends State<HomePageUser> {
                       color: Colors.green[800],
                     ),
                   ),
-                  SizedBox(height: 4),
+                  const SizedBox(height: 4),
                   Text(
                     _lastScannedData ?? "",
                     style: TextStyle(
@@ -237,7 +237,7 @@ class _HomePageUserState extends State<HomePageUser> {
               ),
             ),
             IconButton(
-              icon: Icon(Icons.close, size: 20),
+              icon: const Icon(Icons.close, size: 20),
               onPressed: () {
                 if (!mounted) return;
                 setState(() => _lastScannedData = null);
@@ -271,7 +271,7 @@ class _HomePageUserState extends State<HomePageUser> {
             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             children: [
               _bottomItem(Icons.home, "Beranda", true, () {}),
-              SizedBox(width: 80),
+              const SizedBox(width: 80),
               _bottomItem(Icons.person_outline, "Profile", false, () {
                 Navigator.push(
                   context,
@@ -297,7 +297,7 @@ class _HomePageUserState extends State<HomePageUser> {
                   _lastScannedData = result;
                 });
                 ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
+                  const SnackBar(
                     content: Text("QR Code berhasil dipindai!"),
                     backgroundColor: Colors.green,
                   ),
@@ -308,18 +308,18 @@ class _HomePageUserState extends State<HomePageUser> {
               width: 70,
               height: 70,
               decoration: BoxDecoration(
-                color: Color(0xFF36546C),
+                color: const Color(0xFF36546C),
                 shape: BoxShape.circle,
                 boxShadow: [
                   BoxShadow(
                     color: Colors.black.withOpacity(0.2),
                     blurRadius: 15,
-                    offset: Offset(0, 5),
+                    offset: const Offset(0, 5),
                   ),
                 ],
                 border: Border.all(color: Colors.white, width: 4),
               ),
-              child: Center(
+              child: const Center(
                 child:
                     Icon(Icons.qr_code_scanner, color: Colors.white, size: 32),
               ),
@@ -340,14 +340,14 @@ class _HomePageUserState extends State<HomePageUser> {
         children: [
           Icon(
             icon,
-            color: active ? Color(0xFF36546C) : Colors.grey[400],
+            color: active ? const Color(0xFF36546C) : Colors.grey[400],
             size: 26,
           ),
           const SizedBox(height: 4),
           Text(
             label,
             style: TextStyle(
-              color: active ? Color(0xFF36546C) : Colors.grey[400],
+              color: active ? const Color(0xFF36546C) : Colors.grey[400],
               fontSize: 11,
               fontWeight: active ? FontWeight.w600 : FontWeight.w400,
             ),
@@ -396,7 +396,7 @@ class _HomePageUserState extends State<HomePageUser> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
+                    const Text(
                       "HALO!",
                       style: TextStyle(
                         color: Colors.white,
@@ -408,7 +408,7 @@ class _HomePageUserState extends State<HomePageUser> {
                     const SizedBox(height: 4),
                     Text(
                       user.userName,
-                      style: TextStyle(
+                      style: const TextStyle(
                         color: Colors.white,
                         fontSize: 18,
                         fontWeight: FontWeight.w700,
@@ -417,7 +417,7 @@ class _HomePageUserState extends State<HomePageUser> {
                     const SizedBox(height: 2),
                     Text(
                       user.userRole,
-                      style: TextStyle(
+                      style: const TextStyle(
                         color: Colors.white70,
                         fontSize: 11,
                       ),
@@ -460,7 +460,7 @@ class _HomePageUserState extends State<HomePageUser> {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceEvenly,
       children: [
-        _menuButton(Icons.accessibility_new, "Hadir", Color(0xFF5B7C99), () async {
+        _menuButton(Icons.accessibility_new, "Hadir", const Color(0xFF5B7C99), () async {
           await Navigator.push(
             context,
             MaterialPageRoute(builder: (_) => const KehadiranPage()),
@@ -468,7 +468,7 @@ class _HomePageUserState extends State<HomePageUser> {
           // Refresh data setelah kembali dari halaman Hadir
           _loadStatistics();
         }),
-        _menuButton(Icons.list_alt, "Izin", Color(0xFF5B7C99), () async {
+        _menuButton(Icons.list_alt, "Izin", const Color(0xFF5B7C99), () async {
           await Navigator.push(
             context,
             MaterialPageRoute(builder: (_) => const PengajuanIzinPage()),
@@ -476,7 +476,7 @@ class _HomePageUserState extends State<HomePageUser> {
           // Refresh data setelah kembali dari halaman Izin
           _loadStatistics();
         }),
-        _menuButton(Icons.medical_services, "Sakit", Color(0xFF5B7C99), () async {
+        _menuButton(Icons.medical_services, "Sakit", const Color(0xFF5B7C99), () async {
           await Navigator.push(
             context,
             MaterialPageRoute(builder: (_) => const PengajuanSakitPage()),
@@ -484,7 +484,7 @@ class _HomePageUserState extends State<HomePageUser> {
           // Refresh data setelah kembali dari halaman Sakit
           _loadStatistics();
         }),
-        _menuButton(Icons.watch_later, "Cuti", Color(0xFF5B7C99), () async {
+        _menuButton(Icons.watch_later, "Cuti", const Color(0xFF5B7C99), () async {
           await Navigator.push(
             context,
             MaterialPageRoute(builder: (_) => const PengajuanCutiPage()),
@@ -520,7 +520,7 @@ class _HomePageUserState extends State<HomePageUser> {
           const SizedBox(height: 8),
           Text(
             title,
-            style: TextStyle(
+            style: const TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w600,
               color: Colors.black87,
@@ -534,8 +534,8 @@ class _HomePageUserState extends State<HomePageUser> {
   // ===================== Schedule Card =====================
   Widget _buildScheduleCard() {
     if (!_localeReady) {
-      return Padding(
-        padding: const EdgeInsets.all(20),
+      return const Padding(
+        padding: EdgeInsets.all(20),
         child: Center(child: CircularProgressIndicator()),
       );
     }
@@ -556,7 +556,7 @@ class _HomePageUserState extends State<HomePageUser> {
               BoxShadow(
                 color: Colors.black.withOpacity(0.08),
                 blurRadius: 12,
-                offset: Offset(0, 4),
+                offset: const Offset(0, 4),
               ),
             ],
           ),
@@ -565,14 +565,14 @@ class _HomePageUserState extends State<HomePageUser> {
             children: [
               Text(
                 formattedDate,
-                style: TextStyle(
+                style: const TextStyle(
                   color: Colors.black87,
                   fontSize: 13,
                   fontWeight: FontWeight.w600,
                 ),
               ),
               const SizedBox(height: 16),
-              Center(
+              const Center(
                 child: Text(
                   "08:00 - 18:00",
                   style: TextStyle(
@@ -591,8 +591,8 @@ class _HomePageUserState extends State<HomePageUser> {
                     MaterialPageRoute(builder: (_) => const MapsPage()),
                   );
                 },
-                icon: Icon(Icons.location_on, size: 20),
-                label: Text(
+                icon: const Icon(Icons.location_on, size: 20),
+                label: const Text(
                   "Cek lokasi",
                   style: TextStyle(
                     fontWeight: FontWeight.w600,
@@ -600,12 +600,12 @@ class _HomePageUserState extends State<HomePageUser> {
                   ),
                 ),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: Color(0xFFD1644A),
+                  backgroundColor: const Color(0xFFD1644A),
                   foregroundColor: Colors.white,
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
                   ),
-                  minimumSize: Size(double.infinity, 48),
+                  minimumSize: const Size(double.infinity, 48),
                   elevation: 0,
                 ),
               ),
@@ -623,7 +623,7 @@ class _HomePageUserState extends State<HomePageUser> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
+          const Text(
             "Aktivitas",
             style: TextStyle(
               fontSize: 18,
@@ -635,7 +635,7 @@ class _HomePageUserState extends State<HomePageUser> {
           Container(
             width: double.infinity,
             height: 280,
-            padding: EdgeInsets.all(20),
+            padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
               color: Colors.white,
               borderRadius: BorderRadius.circular(16),
@@ -643,12 +643,12 @@ class _HomePageUserState extends State<HomePageUser> {
                 BoxShadow(
                   color: Colors.black.withOpacity(0.06),
                   blurRadius: 10,
-                  offset: Offset(0, 3),
+                  offset: const Offset(0, 3),
                 ),
               ],
             ),
             child: _isLoadingStats
-                ? Center(
+                ? const Center(
                     child: CircularProgressIndicator(
                       color: Color(0xFF36546C),
                     ),
@@ -683,7 +683,7 @@ class _HomePageUserState extends State<HomePageUser> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
+          const Text(
             "Detail",
             style: TextStyle(
               fontSize: 18,
@@ -710,21 +710,21 @@ class _HomePageUserState extends State<HomePageUser> {
             title: "Izin",
             count: _totalIzin,
             total: total,
-            color: Color(0xFFF8E71C),
+            color: const Color(0xFFF8E71C),
           ),
           const SizedBox(height: 12),
           _buildDetailBar(
             title: "Sakit",
             count: _totalSakit,
             total: total,
-            color: Color(0xFF7ED321),
+            color: const Color(0xFF7ED321),
           ),
           const SizedBox(height: 12),
           _buildDetailBar(
             title: "Cuti",
             count: _totalCuti,
             total: total,
-            color: Color(0xFF9B59B6),
+            color: const Color(0xFF9B59B6),
           ),
         ],
       ),
@@ -748,7 +748,7 @@ class _HomePageUserState extends State<HomePageUser> {
           children: [
             Text(
               title,
-              style: TextStyle(
+              style: const TextStyle(
                 fontSize: 14,
                 fontWeight: FontWeight.w600,
                 color: Colors.black87,
@@ -756,7 +756,7 @@ class _HomePageUserState extends State<HomePageUser> {
             ),
             Text(
               "$percentage%",
-              style: TextStyle(
+              style: const TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.w600,
                 color: Colors.black54,
@@ -852,11 +852,11 @@ class DonutChartPainter extends CustomPainter {
     ];
 
     final colors = [
-      Color(0xFF5BA3D0), // Biru untuk Hadir
-      Color(0xFFF5A623), // Orange untuk Proses
-      Color(0xFFF8E71C), // Kuning untuk Izin
-      Color(0xFF7ED321), // Hijau untuk Sakit
-      Color(0xFF9B59B6), // Ungu untuk Cuti
+      const Color(0xFF5BA3D0), // Biru untuk Hadir
+      const Color(0xFFF5A623), // Orange untuk Proses
+      const Color(0xFFF8E71C), // Kuning untuk Izin
+      const Color(0xFF7ED321), // Hijau untuk Sakit
+      const Color(0xFF9B59B6), // Ungu untuk Cuti
     ];
 
     final labels = ['Hadir', 'Proses', 'Izin', 'Sakit', 'Cuti'];
@@ -887,7 +887,7 @@ class DonutChartPainter extends CustomPainter {
         final textPainter = TextPainter(
           text: TextSpan(
             text: labels[i],
-            style: TextStyle(
+            style: const TextStyle(
               color: Colors.black54,
               fontSize: 10,
               fontWeight: FontWeight.w500,
@@ -902,7 +902,7 @@ class DonutChartPainter extends CustomPainter {
         final percentPainter = TextPainter(
           text: TextSpan(
             text: '$percentage%',
-            style: TextStyle(
+            style: const TextStyle(
               color: Colors.black87,
               fontSize: 9,
               fontWeight: FontWeight.bold,

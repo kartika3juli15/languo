@@ -18,14 +18,14 @@ class _AuthPageState extends State<AuthPage> {
     return StreamBuilder<User?>(
       stream: FirebaseAuth.instance.authStateChanges(),
       builder: (context, snapshot) {
-        // ⏳ Cek login
+        // Cek login
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Scaffold(
             body: Center(child: CircularProgressIndicator()),
           );
         }
 
-        // 👤 Jika user login → cek role
+        // Jika user login, cek role
         if (snapshot.hasData) {
           final user = snapshot.data!;
 
@@ -54,7 +54,7 @@ class _AuthPageState extends State<AuthPage> {
           );
         }
 
-        // ❌ User belum login → hanya tampilkan Login
+        // User belum login, hanya tampilkan Login
         return const LoginScreen();
       },
     );

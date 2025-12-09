@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 class FaqAdminPage extends StatefulWidget {
-  const FaqAdminPage({Key? key}) : super(key: key);
+  const FaqAdminPage({super.key});
 
   @override
   State<FaqAdminPage> createState() => _FaqAdminPageState();

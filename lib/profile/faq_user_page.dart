@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 class FaqPage extends StatefulWidget {
-  const FaqPage({Key? key}) : super(key: key);
+  const FaqPage({super.key});
 
   @override
   State<FaqPage> createState() => _FaqPageState();

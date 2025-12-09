@@ -54,8 +54,8 @@ class _PengajuanCutiPageState extends State<PengajuanCutiPage> {
                   const Icon(Icons.arrow_back, color: Colors.white, size: 26),
             ),
             const SizedBox(width: 10),
-            Text("Cuti",
-                style: const TextStyle(
+            const Text("Cuti",
+                style: TextStyle(
                     color: Colors.white,
                     fontSize: 20,
                     fontWeight: FontWeight.bold)),

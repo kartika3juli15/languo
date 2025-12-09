@@ -38,11 +38,9 @@ class LogoutDialog {
                     Expanded(
                       child: ElevatedButton(
                         onPressed: () async {
-                          // Tutup dialog terlebih dahulu
                           Navigator.of(dialogContext).pop();
                           
                           try {
-                            // Proses log out
                             await FirebaseAuth.instance.signOut();
 
                             if (context.mounted) {

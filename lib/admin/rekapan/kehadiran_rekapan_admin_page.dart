@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 class AdminKehadiranPage extends StatefulWidget {
-  const AdminKehadiranPage({Key? key}) : super(key: key);
+  const AdminKehadiranPage({super.key});
 
   @override
   State<AdminKehadiranPage> createState() => _AdminKehadiranPageState();

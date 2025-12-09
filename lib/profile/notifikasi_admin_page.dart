@@ -299,9 +299,9 @@ class AdminNotifCard extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 6),
-                Text(
+                const Text(
                   "Periode:",
-                  style: const TextStyle(fontSize: 12),
+                  style: TextStyle(fontSize: 12),
                 ),
                 Text(
                   tanggal,

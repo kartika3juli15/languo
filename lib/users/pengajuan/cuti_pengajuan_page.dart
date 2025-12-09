@@ -263,10 +263,10 @@ class _PengajuanCutiPageState extends State<PengajuanCutiPage> {
         keterangan: keteranganController.text,
         lampiranBytes: lampiranBytes,
         fileName: lampiranName,
-        sisaCutiSaatPengajuan:
-            sisaCutiSaatPengajuan, // ⬅ kirim apa adanya dari users
+        sisaCutiSaatPengajuan: sisaCutiSaatPengajuan,
       );
 
+      // reset form
       setState(() {
         isSubmitted = true;
         alasanController.clear();
@@ -290,30 +290,44 @@ class _PengajuanCutiPageState extends State<PengajuanCutiPage> {
     return Scaffold(
       backgroundColor: Colors.white,
       body: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           _buildHeader(),
           _buildTabBar(),
-
-          // === TAMBAHKAN INI ===
           if (selectedTab == 0)
-            Padding(
-              padding: const EdgeInsets.only(top: 6, bottom: 8),
-              child: isFetchingCuti
-                  ? const CircularProgressIndicator()
-                  : Text(
-                      "Sisa Cuti: ${sisaCutiSaatPengajuan!.toInt()} hari",
-                      style: const TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.deepOrange,
-                      ),
-                    ),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.only(
+                      top: 8, left: 20, right: 20), // jarak atas 8 saja
+                  child: isFetchingCuti
+                      ? const CircularProgressIndicator()
+                      : Align(
+                          alignment: Alignment.center,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 12, vertical: 6),
+                            decoration: BoxDecoration(
+                              color: Colors.deepOrange.shade100,
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            child: Text(
+                              "Sisa cuti Anda: ${sisaCutiSaatPengajuan!.toInt()} hari",
+                              style: const TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.deepOrange,
+                              ),
+                            ),
+                          ),
+                        ),
+                ),
+                const SizedBox(height: 8), // jarak bawah ke form
+              ],
             ),
-
           Expanded(
-            child: selectedTab == 0
-                ? _buildForm()
-                : const RekapanCutiPage(), // Panggil halaman rekapan cuti
+            child: selectedTab == 0 ? _buildForm() : const RekapanCutiPage(),
           ),
         ],
       ),
@@ -358,13 +372,13 @@ class _PengajuanCutiPageState extends State<PengajuanCutiPage> {
     );
   }
 
-  // ===== TAB =====
   Widget _buildTabBar() {
     return Transform.translate(
-      offset: const Offset(0, -30),
+      offset: const Offset(0, -30), // tetap untuk efek tab bar naik
       child: Container(
         height: 55,
-        margin: const EdgeInsets.symmetric(horizontal: 20),
+        margin: const EdgeInsets.symmetric(horizontal: 20)
+            .copyWith(bottom: 0), // jarak bawah 8px
         decoration: BoxDecoration(
           color: Colors.grey.shade200,
           borderRadius: BorderRadius.circular(40),
@@ -424,7 +438,6 @@ class _PengajuanCutiPageState extends State<PengajuanCutiPage> {
     return SingleChildScrollView(
       padding: const EdgeInsets.symmetric(horizontal: 20),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        const SizedBox(height: 20),
         const Text("Alasan Cuti",
             style: TextStyle(
                 color: Color(0xFF7F7F7F), fontWeight: FontWeight.w600)),
@@ -515,7 +528,7 @@ class _PengajuanCutiPageState extends State<PengajuanCutiPage> {
             ),
           ),
         const SizedBox(height: 20),
-        const Text("Keterangan",
+        const Text("Keterangan (Opsional)",
             style: TextStyle(
                 color: Color(0xFF7F7F7F), fontWeight: FontWeight.w600)),
         const SizedBox(height: 8),

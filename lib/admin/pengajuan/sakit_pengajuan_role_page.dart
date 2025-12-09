@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:languo/admin/verifikasi/sakit_verifikasi_admin_page.dart';
+import 'package:languo/admin/home_page.dart';
 
 class AdminSakitPage extends StatefulWidget {
   const AdminSakitPage({super.key});
@@ -36,31 +37,35 @@ class _AdminSakitPageState extends State<AdminSakitPage> {
           bottomRight: Radius.circular(40),
         ),
       ),
-      child: Stack(
-        children: [
-          Align(
-            alignment: Alignment.centerLeft,
-            child: GestureDetector(
-              onTap: () => Navigator.pop(context),
-              child: const Padding(
-                padding: EdgeInsets.only(left: 16),
-                child: Icon(Icons.arrow_back, color: Colors.white, size: 28),
-              ),
+      child: Stack(children: [
+        Align(
+          alignment: Alignment.centerLeft,
+          child: GestureDetector(
+            onTap: () {
+              Navigator.pushAndRemoveUntil(
+                context,
+                MaterialPageRoute(builder: (_) => const HomeAdmin()),
+                (route) => false,
+              );
+            },
+            child: const Padding(
+              padding: EdgeInsets.only(left: 16),
+              child: Icon(Icons.arrow_back, color: Colors.white, size: 28),
             ),
           ),
-          const Align(
-            alignment: Alignment.center,
-            child: Text(
-              "Sakit",
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 22,
-                fontWeight: FontWeight.bold,
-              ),
+        ),
+        const Align(
+          alignment: Alignment.center,
+          child: Text(
+            "Sakit",
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 22,
+              fontWeight: FontWeight.bold,
             ),
           ),
-        ],
-      ),
+        ),
+      ]),
     );
   }
 

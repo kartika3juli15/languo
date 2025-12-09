@@ -6,10 +6,9 @@ class UserModel {
   final String userEmail;
   final String userRole;
   String? userPhoto;
-  String? userPass;
-  final num sisaCuti;
+  final num? sisaCuti;
 
-  final DateTime createdAt;
+  final DateTime? createdAt;
 
   UserModel({
     required this.uid,
@@ -17,10 +16,9 @@ class UserModel {
     required this.userEmail,
     required this.userRole,
     this.userPhoto,
-    this.userPass,
     required this.sisaCuti,
-    DateTime? createdAt,
-  }) : createdAt = createdAt ?? DateTime.now();
+    this.createdAt,
+  });
 
   /// Convert Model -> Firestore
   Map<String, dynamic> toMap() {
@@ -30,9 +28,7 @@ class UserModel {
       'user_email': userEmail,
       'user_role': userRole,
       'user_photo': userPhoto,
-      'user_password': userPass,
-      'sisa_cuti': sisaCuti,
-      "created_at": Timestamp.fromDate(createdAt),
+      'sisa_cuti': (sisaCuti ?? 0),
     };
   }
 
@@ -42,13 +38,14 @@ class UserModel {
 
     return UserModel(
       uid: doc.id,
-      userName: data['user_name'],
-      userEmail: data['user_email'],
-      userRole: data['user_role'],
+      userName: data['user_name'] ?? '',
+      userEmail: data['user_email'] ?? '',
+      userRole: data['user_role'] ?? '',
       userPhoto: data['user_photo'],
-      userPass: data['user_password'],
-      sisaCuti: data['sisa_cuti'],
-      createdAt: (data['created_at'] as Timestamp).toDate(),
+      sisaCuti: (data['sisa_cuti'] != null) ? (data['sisa_cuti'] as num) : null,
+      createdAt: (data['created_at'] is Timestamp)
+          ? (data['created_at'] as Timestamp).toDate()
+          : null,
     );
   }
 }

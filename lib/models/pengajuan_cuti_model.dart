@@ -5,29 +5,33 @@ class PengajuanCutiModel {
   final String userId;
   final String userName;
   final String userRole;
+  final String userEmail;
   final String alasan;
-  final DateTime startDate;
-  final DateTime endDate;
-  final String keterangan;
+  final DateTime tanggalMulai;
+  final DateTime tanggalSelesai;
+  String? keterangan;
   final String? lampiranUrl;
   final String? fileName;
   final num sisaCutiSaatPengajuan;
   final String status;
   final DateTime createdAt;
+  final DateTime? tanggalVerifikasi;
 
   PengajuanCutiModel({
     required this.cutiId,
     required this.userId,
     required this.userName,
     required this.userRole,
+    required this.userEmail,
     required this.alasan,
-    required this.startDate,
-    required this.endDate,
-    required this.keterangan,
+    required this.tanggalMulai,
+    required this.tanggalSelesai,
+    this.keterangan,
     this.lampiranUrl,
     this.fileName,
     required this.sisaCutiSaatPengajuan,
     required this.status,
+    this.tanggalVerifikasi,
     DateTime? createdAt,
   }) : createdAt = createdAt ?? DateTime.now();
 
@@ -37,15 +41,17 @@ class PengajuanCutiModel {
       "user_id": userId,
       "user_name": userName,
       "user_role": userRole,
+      "user_email": userEmail,
       "alasan": alasan,
-      "start_date": Timestamp.fromDate(startDate),
-      "end_date": Timestamp.fromDate(endDate),
+      "tanggal_mulai": Timestamp.fromDate(tanggalMulai),
+      "tanggal_selesai": Timestamp.fromDate(tanggalSelesai),
       "keterangan": keterangan,
       "lampiran_url": lampiranUrl,
       "file_name": fileName,
       "sisa_cuti_saat_pengajuan": sisaCutiSaatPengajuan,
       "status": status,
       "created_at": Timestamp.fromDate(createdAt),
+      "tanggal_verifikasi": tanggalVerifikasi,
     };
   }
 
@@ -59,15 +65,17 @@ class PengajuanCutiModel {
       userId: data["user_id"],
       userName: data["user_name"],
       userRole: data["user_role"],
+      userEmail: data["user_email"],
       alasan: data["alasan"],
-      startDate: (data["start_date"] as Timestamp).toDate(),
-      endDate: (data["end_date"] as Timestamp).toDate(),
+      tanggalMulai: (data["tanggal_mulai"] as Timestamp).toDate(),
+      tanggalSelesai: (data["tanggal_selesai"] as Timestamp).toDate(),
       keterangan: data["keterangan"],
       lampiranUrl: data["lampiran_url"],
       fileName: data["file_name"],
       sisaCutiSaatPengajuan: data["sisa_cuti_saat_pengajuan"],
       status: data["status"],
       createdAt: (data["created_at"] as Timestamp).toDate(),
+      tanggalVerifikasi: (data["tanggal_verifikasi"] as Timestamp).toDate(),
     );
   }
 }

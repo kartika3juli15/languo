@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:languo/admin/rekapan/izin_rekapan_admin_page.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:languo/admin/pengajuan/izin_pengajuan_role_page.dart';
 
 class VerifikasiIzinPage extends StatefulWidget {
   final String role; // menerima role dari halaman sebelumnya
@@ -34,21 +35,18 @@ class _VerifikasiIzinPageState extends State<VerifikasiIzinPage> {
     12: "Des",
   };
 
+  Stream<QuerySnapshot> getPengajuanIzin() {
+    return FirebaseFirestore.instance
+        .collection('pengajuan_izin')
+        .where('status', isEqualTo: 'Diajukan')
+        .where('user_role', isEqualTo: widget.role)
+        .snapshots();
+  }
+
   // ====================== WIDGET KARTU (collapsed / expanded) ======================
   Widget izinTile(Map<String, dynamic> data, String id, int index) {
-    // safe timestamp handling
-    DateTime tglMulai;
-    DateTime tglSelesai;
-    try {
-      tglMulai = (data['tanggalMulai'] as Timestamp).toDate();
-    } catch (_) {
-      tglMulai = DateTime.now();
-    }
-    try {
-      tglSelesai = (data['tanggalSelesai'] as Timestamp).toDate();
-    } catch (_) {
-      tglSelesai = tglMulai;
-    }
+    DateTime mulai = (data['tanggal_mulai'] as Timestamp).toDate();
+    DateTime selesai = (data['tanggal_selesai'] as Timestamp).toDate();
 
     final isExpanded = expandedIndex == index;
 
@@ -83,20 +81,20 @@ class _VerifikasiIzinPageState extends State<VerifikasiIzinPage> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      data['userName'] ?? "-",
+                      data['user_name'] ?? "-",
                       style: const TextStyle(
                           fontSize: 14, fontWeight: FontWeight.bold),
                     ),
                     const SizedBox(height: 6),
-                    Text(
+                    const Text(
                       "Periode Izin :",
                       style: TextStyle(
                         fontSize: 12,
-                        color: const Color.fromARGB(255, 3, 3, 3),
+                        color: Color.fromARGB(255, 3, 3, 3),
                       ),
                     ),
                     Text(
-                      "${tglMulai.day} ${bulan[tglMulai.month]} ${tglMulai.year} s.d ${tglSelesai.day} ${bulan[tglSelesai.month]} ${tglSelesai.year}",
+                      "${mulai.day} ${bulan[mulai.month]} ${mulai.year} s.d ${selesai.day} ${bulan[selesai.month]} ${selesai.year}",
                       style: const TextStyle(fontSize: 12, color: Colors.red),
                     ),
                   ],
@@ -110,11 +108,11 @@ class _VerifikasiIzinPageState extends State<VerifikasiIzinPage> {
                     padding:
                         const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                     decoration: BoxDecoration(
-                      color: const Color(0xFFFFA86F),
+                      color: const Color.fromARGB(255, 255, 197, 111),
                       borderRadius: BorderRadius.circular(20),
                     ),
                     child: const Text(
-                      "Proses",
+                      "Diajukan",
                       style: TextStyle(
                         color: Colors.white,
                         fontWeight: FontWeight.bold,
@@ -124,7 +122,6 @@ class _VerifikasiIzinPageState extends State<VerifikasiIzinPage> {
                   ),
                   const SizedBox(height: 8),
                   Container(
-                    margin: EdgeInsets.only(right: 0),
                     width: 40,
                     height: 40,
                     decoration: const BoxDecoration(
@@ -162,8 +159,7 @@ class _VerifikasiIzinPageState extends State<VerifikasiIzinPage> {
         boxShadow: [
           BoxShadow(
             color: Colors.black.withOpacity(0.05),
-            blurRadius: 6,
-            offset: const Offset(0, 3),
+            blurRadius: 5,
           )
         ],
       ),
@@ -175,7 +171,7 @@ class _VerifikasiIzinPageState extends State<VerifikasiIzinPage> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(
-                data['userName'] ?? "-",
+                data['user_name'] ?? "-",
                 style:
                     const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
               ),
@@ -190,7 +186,7 @@ class _VerifikasiIzinPageState extends State<VerifikasiIzinPage> {
                       borderRadius: BorderRadius.circular(20),
                     ),
                     child: const Text(
-                      "Proses",
+                      "Diajukan",
                       style: TextStyle(
                         color: Colors.white, // ⬅ teks putih
                         fontWeight: FontWeight.bold,
@@ -213,28 +209,30 @@ class _VerifikasiIzinPageState extends State<VerifikasiIzinPage> {
           const SizedBox(height: 12),
 
           // details like mockup
-          Text("Periode Izin :", style: TextStyle(fontWeight: FontWeight.bold)),
+          const Text("Periode Izin :",
+              style: TextStyle(fontWeight: FontWeight.bold)),
           const SizedBox(height: 4),
           Text(
-            "${tglMulai.day} ${bulan[tglMulai.month]} ${tglMulai.year} s.d ${tglSelesai.day} ${bulan[tglSelesai.month]} ${tglSelesai.year}",
-          ),
+              "${mulai.day} ${bulan[mulai.month]} ${mulai.year} s.d ${selesai.day} ${bulan[selesai.month]} ${selesai.year}"),
           const SizedBox(height: 8),
 
-          Text("Alamat Email :", style: TextStyle(fontWeight: FontWeight.bold)),
+          const Text("Perihal :",
+              style: TextStyle(fontWeight: FontWeight.bold)),
           const SizedBox(height: 4),
-          Text(
-            data['userEmail'] ?? data['email'] ?? "-",
-            style: const TextStyle(fontSize: 14, color: Colors.black87),
-          ),
-
-          Text("Alasan :", style: TextStyle(fontWeight: FontWeight.bold)),
+          Text(data['perihal'] ?? "-"),
+          const SizedBox(height: 8),
+          const Text("Keterangan :",
+              style: TextStyle(fontWeight: FontWeight.bold)),
           const SizedBox(height: 4),
           Text(data['keterangan'] ?? "-"),
           const SizedBox(height: 8),
-
-          Text("Tanggal :", style: TextStyle(fontWeight: FontWeight.bold)),
+          const Text("Alamat Email :",
+              style: TextStyle(fontWeight: FontWeight.bold)),
           const SizedBox(height: 4),
-          Text("${tglMulai.day} ${bulan[tglMulai.month]} ${tglMulai.year}"),
+          Text(
+            data['user_email'] ?? "-",
+            style: const TextStyle(fontSize: 14, color: Colors.black87),
+          ),
           const SizedBox(height: 16),
 
           // file button (full width)
@@ -243,7 +241,7 @@ class _VerifikasiIzinPageState extends State<VerifikasiIzinPage> {
             height: 50,
             child: ElevatedButton.icon(
               onPressed: () async {
-                final url = data['lampiranUrl'];
+                final url = data['lampiran_url'];
                 if (url == null || url.isEmpty) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(content: Text("File tidak tersedia")),
@@ -317,8 +315,10 @@ class _VerifikasiIzinPageState extends State<VerifikasiIzinPage> {
                   await FirebaseFirestore.instance
                       .collection('pengajuan_izin')
                       .doc(id)
-                      .update({"status": "Disetujui"});
-
+                      .update({
+                    "status": "Disetujui",
+                    "tanggal_verifikasi": Timestamp.now(),
+                  });
                   showSuccessPopup(context);
                   setState(() => expandedIndex = -1);
                 },
@@ -341,14 +341,6 @@ class _VerifikasiIzinPageState extends State<VerifikasiIzinPage> {
         ],
       ),
     );
-  }
-
-  Stream<QuerySnapshot> getPengajuanIzin() {
-    return FirebaseFirestore.instance
-        .collection('pengajuan_izin')
-        .where('status', isEqualTo: 'Diajukan')
-        .where('userRole', isEqualTo: widget.role) // hanya role yg sesuai
-        .snapshots();
   }
 
   // ====================== POPUP TERIMA ======================
@@ -453,7 +445,10 @@ class _VerifikasiIzinPageState extends State<VerifikasiIzinPage> {
                             await FirebaseFirestore.instance
                                 .collection('pengajuan_izin')
                                 .doc(id)
-                                .update({"status": "Ditolak"});
+                                .update({
+                              "status": "Ditolak",
+                              "tanggal_verifikasi": Timestamp.now(),
+                            });
 
                             // cek apakah widget masih mounted
                             if (!mounted) return;
@@ -556,33 +551,24 @@ class _VerifikasiIzinPageState extends State<VerifikasiIzinPage> {
           searchBar(),
           Expanded(
             child: StreamBuilder<QuerySnapshot>(
-              stream: selectedTab == 0
-                  ? getPengajuanIzin() // Pengajuan
-                  : FirebaseFirestore.instance
-                      .collection("pengajuan_izin")
-                      .where("status", isNotEqualTo: "Diajukan") // Rekapan
-                      .orderBy("createdAt", descending: true)
-                      .snapshots(),
+              stream: getPengajuanIzin(),
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
                   return const Center(child: CircularProgressIndicator());
                 }
-
                 if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-                  return const Center(
-                    child: Text("Tidak ada pengajuan izin"),
-                  );
+                  return const Center(child: Text("Tidak ada pengajuan izin"));
                 }
 
                 final docs = snapshot.data!.docs;
 
-                // apply search filter (on userName)
                 final filtered = docs.where((doc) {
                   if (keyword.isEmpty) return true;
                   final d = doc.data() as Map<String, dynamic>;
-                  final name = (d['userName'] ?? '').toString().toLowerCase();
-                  final email = (d['email'] ?? '').toString().toLowerCase();
-                  final perihal = (d['perihal'] ?? '').toString().toLowerCase();
+                  final name = (d['user_name'] ?? '').toString().toLowerCase();
+                  final email =
+                      (d['user_email'] ?? '').toString().toLowerCase();
+                  final perihal = (d['periha;'] ?? '').toString().toLowerCase();
                   return name.contains(keyword) ||
                       email.contains(keyword) ||
                       perihal.contains(keyword);
@@ -595,10 +581,10 @@ class _VerifikasiIzinPageState extends State<VerifikasiIzinPage> {
                 return ListView.builder(
                   padding: const EdgeInsets.all(16),
                   itemCount: filtered.length,
-                  itemBuilder: (context, index) {
-                    final doc = filtered[index];
-                    final d = doc.data() as Map<String, dynamic>;
-                    return izinTile(d, doc.id, index);
+                  itemBuilder: (context, i) {
+                    final doc = filtered[i];
+                    return izinTile(
+                        doc.data() as Map<String, dynamic>, doc.id, i);
                   },
                 );
               },
@@ -629,20 +615,34 @@ class _VerifikasiIzinPageState extends State<VerifikasiIzinPage> {
             mainAxisSize: MainAxisSize.min,
             children: [
               InkWell(
-                onTap: () => Navigator.of(context).pop(),
-                child: const Icon(
-                  Icons.arrow_back,
-                  color: Colors.white,
-                  size: 26,
-                ),
+                onTap: () {
+                  Navigator.pushReplacement(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const PengajuanIzinPage(),
+                    ),
+                  );
+                },
+                child:
+                    const Icon(Icons.arrow_back, color: Colors.white, size: 26),
               ),
               const SizedBox(width: 10),
-              Text(
-                "Izin  <  ${widget.role}",
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
+              InkWell(
+                onTap: () {
+                  Navigator.pushReplacement(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const PengajuanIzinPage(),
+                    ),
+                  );
+                },
+                child: Text(
+                  "Izin  <  ${widget.role}",
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
               ),
             ],

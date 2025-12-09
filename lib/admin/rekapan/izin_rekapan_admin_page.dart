@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:languo/admin/verifikasi/izin_verifikasi_admin_page.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:languo/admin/pengajuan/izin_pengajuan_role_page.dart';
 
 class RekapanAdminIzinPage extends StatefulWidget {
   final String role;
@@ -42,7 +43,7 @@ class _RekapanAdminIzinPageState extends State<RekapanAdminIzinPage> {
     return FirebaseFirestore.instance
         .collection("pengajuan_izin")
         .where("status", whereIn: ["Disetujui", "Ditolak"])
-        .where("userRole", isEqualTo: widget.role) // filter role sesuai
+        .where("user_role", isEqualTo: widget.role) // filter role sesuai
         .snapshots();
   }
 
@@ -67,7 +68,7 @@ class _RekapanAdminIzinPageState extends State<RekapanAdminIzinPage> {
 
         // FILTER pencarian
         final filteredDocs = snapshot.data!.docs.where((doc) {
-          final nama = (doc["userName"] ?? "").toString().toLowerCase();
+          final nama = (doc["user_name"] ?? "").toString().toLowerCase();
           return nama.contains(keyword);
         }).toList();
 
@@ -104,17 +105,34 @@ class _RekapanAdminIzinPageState extends State<RekapanAdminIzinPage> {
           child: Row(
             children: [
               InkWell(
-                onTap: () => Navigator.of(context).pop(),
+                onTap: () {
+                  Navigator.pushReplacement(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const PengajuanIzinPage(),
+                    ),
+                  );
+                },
                 child:
                     const Icon(Icons.arrow_back, color: Colors.white, size: 26),
               ),
               const SizedBox(width: 10),
-              Text(
-                "Izin  <  ${widget.role}",
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
+              InkWell(
+                onTap: () {
+                  Navigator.pushReplacement(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const PengajuanIzinPage(),
+                    ),
+                  );
+                },
+                child: Text(
+                  "Izin  <  ${widget.role}",
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
               ),
             ],
@@ -246,15 +264,19 @@ class _RekapanAdminIzinPageState extends State<RekapanAdminIzinPage> {
     final data = doc.data() as Map<String, dynamic>;
 
     // Ambil field dari Firestore
-    final nama = data["userName"] ?? "-";
-    final email = data["userEmail"] ?? "-";
-    final alasan = data["keterangan"] ?? "-";
-    final jenis = data["perihal"] ?? "-";
-    final file = data["lampiranUrl"] ?? "";
+    final nama = data["user_name"] ?? "-";
+    final email = data["user_email"] ?? "-";
+    final keterangan = data["keterangan"] ?? "-";
+    final perihal = data["perihal"] ?? "-";
+    final file = data["lampiran_url"] ?? "";
     final status = data["status"] ?? "-";
 
-    final mulai = (data["tanggalMulai"] as Timestamp).toDate();
-    final selesai = (data["tanggalSelesai"] as Timestamp).toDate();
+    final mulai = (data["tanggal_mulai"] as Timestamp).toDate();
+    final selesai = (data["tanggal_selesai"] as Timestamp).toDate();
+    final tanggalVerifikasiTimestamp = data["tanggal_verifikasi"] as Timestamp?;
+    final tanggalVerifikasi = tanggalVerifikasiTimestamp != null
+        ? tanggalVerifikasiTimestamp.toDate()
+        : null;
 
     Color badgeColor = status == "Disetujui" ? Colors.green : Colors.red;
 
@@ -340,21 +362,47 @@ class _RekapanAdminIzinPageState extends State<RekapanAdminIzinPage> {
 
           if (isExpanded) ...[
             const SizedBox(height: 15),
-
             detailRow("Alamat Email :", email),
-            detailRow("Alasan :", alasan),
-            detailRow("Jenis Izin :", jenis),
+            detailRow("Perihal :", perihal),
+            detailRow("Keterangan :", keterangan),
             detailRow(
-              "Tanggal :",
-              "${format(mulai)} s.d ${format(selesai)}",
+              "Tanggal Verifikasi :",
+              tanggalVerifikasi != null
+                  ? "${[
+                      "Senin",
+                      "Selasa",
+                      "Rabu",
+                      "Kamis",
+                      "Jumat",
+                      "Sabtu",
+                      "Minggu"
+                    ][tanggalVerifikasi.weekday - 1]}, "
+                      "${tanggalVerifikasi.day.toString().padLeft(2, '0')} "
+                      "${[
+                      "Januari",
+                      "Februari",
+                      "Maret",
+                      "April",
+                      "Mei",
+                      "Juni",
+                      "Juli",
+                      "Agustus",
+                      "September",
+                      "Oktober",
+                      "November",
+                      "Desember"
+                    ][tanggalVerifikasi.month - 1]} "
+                      "${tanggalVerifikasi.year}\n"
+                      "Waktu: "
+                      "${tanggalVerifikasi.hour.toString().padLeft(2, '0')}:"
+                      "${tanggalVerifikasi.minute.toString().padLeft(2, '0')}:"
+                      "${tanggalVerifikasi.second.toString().padLeft(2, '0')}"
+                  : "-",
             ),
-
             const SizedBox(height: 15),
-
-            // FILE BUTTON
             GestureDetector(
               onTap: () async {
-                final uri = Uri.parse(file); // file adalah String URL kamu
+                final uri = Uri.parse(file);
                 if (await canLaunchUrl(uri)) {
                   await launchUrl(uri, mode: LaunchMode.externalApplication);
                 } else {
@@ -379,9 +427,7 @@ class _RekapanAdminIzinPageState extends State<RekapanAdminIzinPage> {
                 ),
               ),
             ),
-
             const SizedBox(height: 15),
-
             Align(
               alignment: Alignment.centerRight,
               child: GestureDetector(

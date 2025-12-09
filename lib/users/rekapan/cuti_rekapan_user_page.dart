@@ -8,7 +8,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 class CutiRekapanData {
   final String id;
-  final String perihal;
+  final String alasan;
   final DateTime tanggalMulai;
   final DateTime tanggalSelesai;
   final String status;
@@ -16,14 +16,13 @@ class CutiRekapanData {
   final String? lampiranName;
   final String keterangan;
   final DateTime tanggalPengajuan;
-
   final String userName;
   final String userEmail;
-  final String userClass;
+  final String userRole;
 
   CutiRekapanData({
     required this.id,
-    required this.perihal,
+    required this.alasan,
     required this.tanggalMulai,
     required this.tanggalSelesai,
     required this.status,
@@ -33,7 +32,7 @@ class CutiRekapanData {
     required this.tanggalPengajuan,
     required this.userName,
     required this.userEmail,
-    required this.userClass,
+    required this.userRole,
   });
 }
 
@@ -48,37 +47,6 @@ class _RekapanCutiPageState extends State<RekapanCutiPage> {
   final _cutiService = CutiService();
   final _auth = FirebaseAuth.instance;
 
-  late Future<Map<String, String>> _userDataFuture;
-
-  @override
-  void initState() {
-    super.initState();
-    _userDataFuture = _fetchUserData();
-  }
-
-  Future<Map<String, String>> _fetchUserData() async {
-    final userId = _auth.currentUser?.uid;
-    if (userId == null) {
-      return {
-        'userName': 'Data Tidak Ditemukan',
-        'userEmail': 'N/A',
-        'userClass': 'N/A',
-      };
-    }
-
-    final userDoc =
-        await FirebaseFirestore.instance.collection("users").doc(userId).get();
-    final data = userDoc.data();
-
-    return {
-      'userName': data?['user_name'] ?? 'Data Tidak Ditemukan',
-      'userEmail': data?['user_email'] ??
-          _auth.currentUser!.email ??
-          'Email Tidak Ditetapkan',
-      'userClass': data?['kelas'] ?? 'Jabatan Tidak Ditetapkan',
-    };
-  }
-
   @override
   Widget build(BuildContext context) {
     final currentUser = _auth.currentUser;
@@ -88,90 +56,110 @@ class _RekapanCutiPageState extends State<RekapanCutiPage> {
           child: Text("Anda harus login untuk melihat rekapan."));
     }
 
-    return FutureBuilder<Map<String, String>>(
-      future: _userDataFuture,
-      builder: (context, userSnapshot) {
-        if (userSnapshot.connectionState == ConnectionState.waiting) {
+    return StreamBuilder<QuerySnapshot>(
+      stream: _cutiService.getRekapanCuti(currentUser.uid),
+      builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return Center(child: Text('Error: ${snapshot.error}'));
+        }
+        if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(child: CircularProgressIndicator());
         }
-        if (userSnapshot.hasError) {
-          return Center(
-              child: Text('Error loading user data: ${userSnapshot.error}'));
+
+        final docs = snapshot.data?.docs ?? [];
+
+        if (docs.isEmpty) {
+          return const Center(
+            child: Text(
+              "Belum ada pengajuan cuti",
+              style: TextStyle(fontSize: 18, color: Colors.grey),
+            ),
+          );
         }
 
-        final userData = userSnapshot.data!;
+        return FutureBuilder<Map<String, String>>(
+          future: _fetchUserData(currentUser.uid),
+          builder: (context, userSnapshot) {
+            if (userSnapshot.connectionState == ConnectionState.waiting) {
+              return const Center(child: CircularProgressIndicator());
+            }
+            if (userSnapshot.hasError) {
+              return Center(
+                  child: Text('Error loading user data: ${userSnapshot.error}'));
+            }
 
-        return Column(
-          children: [
-            Expanded(
-              child: StreamBuilder<QuerySnapshot>(
-                stream: _cutiService.getRekapanCuti(currentUser.uid),
-                builder: (context, snapshot) {
-                  if (snapshot.hasError) {
-                    return Center(child: Text('Error: ${snapshot.error}'));
-                  }
-                  if (snapshot.connectionState == ConnectionState.waiting) {
-                    return const Center(child: CircularProgressIndicator());
-                  }
+            final userData = userSnapshot.data ?? {
+              'userName': 'Data Tidak Ditemukan',
+              'userEmail': 'N/A',
+              'userRole': 'N/A',
+            };
 
-                  final docs = snapshot.data?.docs ?? [];
+            final cutiList = docs.map((d) {
+              final data = d.data() as Map<String, dynamic>;
 
-                  if (docs.isEmpty) {
-                    return const Center(
-                      child: Text(
-                        "Belum ada pengajuan cuti",
-                        style: TextStyle(fontSize: 18, color: Colors.grey),
-                      ),
-                    );
-                  }
+              DateTime tanggalMulai =
+                  (data['tanggal_mulai'] as Timestamp).toDate();
+              DateTime tanggalSelesai =
+                  (data['tanggal_selesai'] as Timestamp).toDate();
 
-                  final cutiList = docs.map((d) {
-                    final data = d.data() as Map<String, dynamic>;
+              final createdAtTimestamp = data['created_at'] as Timestamp?;
 
-                    DateTime tglMulai =
-                        (data['tanggalMulai'] as Timestamp).toDate();
-                    DateTime tglSelesai =
-                        (data['tanggalSelesai'] as Timestamp).toDate();
+              DateTime tanggalPengajuan =
+                  createdAtTimestamp?.toDate() ?? DateTime.now();
 
-                    final createdAtTimestamp = data['createdAt'] as Timestamp?;
+              return CutiRekapanData(
+                id: d.id,
+                alasan: data['alasan'] ?? 'Cuti',
+                tanggalMulai: tanggalMulai,
+                tanggalSelesai: tanggalSelesai,
+                status: data['status'] ?? "Diajukan",
+                lampiranUrl: data['lampiran_url'],
+                lampiranName: data['file_name'] ?? 'Lampiran',
+                keterangan: data['keterangan'] ?? '-',
+                tanggalPengajuan: tanggalPengajuan,
+                userName: userData['userName'] ?? 'Data Tidak Ditemukan',
+                userEmail: userData['userEmail'] ?? 'Email Tidak Ditetapkan',
+                userRole: userData['userRole'] ?? 'Jabatan Tidak Ditetapkan',
+              );
+            }).toList();
 
-                    DateTime tglPengajuan =
-                        createdAtTimestamp?.toDate() ?? DateTime.now();
-
-                    return CutiRekapanData(
-                      id: d.id,
-                      perihal: data['alasan'] ?? 'Cuti',
-                      tanggalMulai: tglMulai,
-                      tanggalSelesai: tglSelesai,
-                      status: data['status'] ?? "Diajukan",
-                      lampiranUrl: data['lampiranUrl'],
-                      lampiranName: data['fileName'] ?? 'Lampiran',
-                      keterangan: data['keterangan'] ?? '-',
-                      tanggalPengajuan: tglPengajuan,
-                      userName: userData['userName']!,
-                      userEmail: userData['userEmail']!,
-                      userClass: userData['userClass']!,
-                    );
-                  }).toList();
-
-                  return ListView.builder(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 16, vertical: 12),
-                    itemCount: cutiList.length,
-                    itemBuilder: (context, index) {
-                      return Padding(
-                        padding: const EdgeInsets.only(bottom: 12.0),
-                        child: _buildCutiRekapanTile(cutiList[index], context),
-                      );
-                    },
-                  );
-                },
-              ),
-            ),
-          ],
+            return ListView.builder(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              itemCount: cutiList.length,
+              itemBuilder: (context, index) {
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 12.0),
+                  child: _buildCutiRekapanTile(cutiList[index], context),
+                );
+              },
+            );
+          },
         );
       },
     );
+  }
+
+  Future<Map<String, String>> _fetchUserData(String userId) async {
+    try {
+      final userDoc =
+          await FirebaseFirestore.instance.collection("users").doc(userId).get();
+      final data = userDoc.data();
+
+      return {
+        'userName': data?['user_name'] ?? 'Data Tidak Ditemukan',
+        'userEmail': data?['user_email'] ??
+            _auth.currentUser?.email ??
+            'Email Tidak Ditetapkan',
+        'userRole': data?['user_role'] ?? 'Jabatan Tidak Ditetapkan',
+      };
+    } catch (e) {
+      print('Error fetching user data: $e');
+      return {
+        'userName': 'Data Tidak Ditemukan',
+        'userEmail': 'N/A',
+        'userRole': 'N/A',
+      };
+    }
   }
 
   Color _statusColor(String status) {
@@ -306,7 +294,7 @@ class _RekapanCutiPageState extends State<RekapanCutiPage> {
         child: ExpansionTile(
           tilePadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           title: Text(
-            cuti.perihal,
+            cuti.alasan,
             style: const TextStyle(
               fontWeight: FontWeight.bold,
               fontSize: 16,
@@ -351,7 +339,7 @@ class _RekapanCutiPageState extends State<RekapanCutiPage> {
                 children: [
                   _buildDetailRow("Nama", cuti.userName),
                   _buildDetailRow("Email", cuti.userEmail),
-                  _buildDetailRow("Kelas/Jabatan", cuti.userClass),
+                  _buildDetailRow("Jabatan", cuti.userRole),
                   const SizedBox(height: 12),
                   _buildDetailRow(
                       "Tgl Pengajuan", _formatTanggal(cuti.tanggalPengajuan)),
@@ -366,9 +354,9 @@ class _RekapanCutiPageState extends State<RekapanCutiPage> {
                         onPressed: () => openPdf(cuti.lampiranUrl!, context),
                         icon: const Icon(Icons.file_download,
                             size: 20, color: Colors.white),
-                        label: Text(
-                          "Lihat Lampiran (${cuti.lampiranName})",
-                          style: const TextStyle(
+                        label: const Text(
+                          "Lihat Lampiran",
+                          style: TextStyle(
                               color: Colors.white, fontWeight: FontWeight.w600),
                         ),
                         style: ElevatedButton.styleFrom(

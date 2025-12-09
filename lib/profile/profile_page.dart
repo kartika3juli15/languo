@@ -10,23 +10,85 @@ import 'notifikasi_user_page.dart';
 import 'notifikasi_admin_page.dart';
 import 'faq_user_page.dart';
 import 'faq_admin_page.dart';
-import 'logout_dialog.dart'; // PASTIKAN INI ADA!
+import 'logout_dialog.dart';
+import '../screen/qr_scanner_screen.dart';
 
-class ProfilePage extends StatelessWidget {
+class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
 
+  @override
+  State<ProfilePage> createState() => _ProfilePageState();
+}
+
+class _ProfilePageState extends State<ProfilePage> {
+  String? _lastScannedData;
+  String? userRole; // nilai role (mis. "Admin" / "Karyawan" / "Dosen" dll)
+
+  late Future<UserModel?> futureUser;
+
+  @override
+  void initState() {
+    super.initState();
+    // panggil sekali
+    futureUser = getUserData();
+  }
+
+  /// Ambil user model dan juga baca field role dari Firestore.
+  /// Mencoba beberapa nama field (user_role / userRole) dan fallback ke UserModel.
   Future<UserModel?> getUserData() async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) return null;
+    final firebaseUser = FirebaseAuth.instance.currentUser;
+    if (firebaseUser == null) return null;
 
     final doc = await FirebaseFirestore.instance
         .collection("users")
-        .doc(user.uid)
+        .doc(firebaseUser.uid)
         .get();
 
     if (!doc.exists) return null;
 
+    final data = doc.data() ?? {};
+    final roleFromDb = data['user_role'] ?? data['userRole'];
+    final String? roleString = roleFromDb is String ? roleFromDb : null;
+
+    // update & rebuild UI (BOTTOM NAV)
+    if (mounted) {
+      setState(() {
+        userRole = roleString;
+      });
+    }
+
     return UserModel.fromFirestore(doc);
+  }
+
+  // helper: apakah role saat ini adalah admin? (case-insensitive)
+  bool get _isAdmin {
+    return (userRole ?? "").toLowerCase() == "admin";
+  }
+
+  Widget getHomeByRole(String role) {
+    switch (role.toLowerCase()) {
+      case "admin":
+        return const HomeAdmin();
+      default:
+        return const HomePageUser();
+    }
+  }
+
+  Future<void> _goToHome() async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
+    final userDoc =
+        await FirebaseFirestore.instance.collection('users').doc(uid).get();
+    final data = userDoc.data() ?? {};
+    final role =
+        (data['user_role'] ?? data['userRole'] ?? 'Karyawan') as String;
+    if (!mounted) return;
+    Navigator.pushReplacement(
+        context, MaterialPageRoute(builder: (_) => getHomeByRole(role)));
+  }
+
+  void _goToProfile() {
+    // already on profile, no-op
   }
 
   @override
@@ -42,8 +104,6 @@ class ProfilePage extends StatelessWidget {
                 color: Color(0xFF36546C),
               ),
             ),
-
-            // Ikon buku di belakang teks
             Positioned(
               right: 0,
               top: 0,
@@ -53,8 +113,6 @@ class ProfilePage extends StatelessWidget {
                 color: Colors.white.withOpacity(0.12),
               ),
             ),
-
-            // Title AppBar di depan ikon
             AppBar(
               elevation: 0,
               backgroundColor: Colors.transparent,
@@ -74,7 +132,7 @@ class ProfilePage extends StatelessWidget {
       ),
       bottomNavigationBar: _buildBottomNav(context),
       body: FutureBuilder<UserModel?>(
-        future: getUserData(),
+        future: futureUser,
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
@@ -83,11 +141,29 @@ class ProfilePage extends StatelessWidget {
           if (!snapshot.hasData) {
             return const Center(child: Text("Data user tidak ditemukan"));
           }
+
           final user = snapshot.data!;
+
+          // Jika userRole belum terisi (null) -> coba isi dari model user
+          // dan panggil setState sekali untuk memaksa rebuild bottom nav.
+          if ((userRole == null || userRole!.isEmpty) && mounted) {
+            final fallback = user.userRole;
+            // setState via postFrame agar tidak di-call di tengah build
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (!mounted) return;
+              setState(() {
+                // prefer role yang sudah kita baca dari Firestore (userRole),
+                // kalau null, pakai UserModel.userRole
+                userRole = (userRole != null && userRole!.isNotEmpty)
+                    ? userRole
+                    : fallback;
+              });
+            });
+          }
 
           return Column(
             children: [
-              // Header dengan background
+              // Header
               Stack(
                 clipBehavior: Clip.none,
                 children: [
@@ -119,7 +195,7 @@ class ProfilePage extends StatelessWidget {
                     ),
                   ),
 
-                  // Profile Picture - positioned to overlap header
+                  // Profile Picture
                   Positioned(
                     left: 0,
                     right: 0,
@@ -128,10 +204,7 @@ class ProfilePage extends StatelessWidget {
                       child: Container(
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
-                          border: Border.all(
-                            color: Colors.white,
-                            width: 4,
-                          ),
+                          border: Border.all(color: Colors.white, width: 4),
                           boxShadow: [
                             BoxShadow(
                               color: Colors.black.withOpacity(0.15),
@@ -160,7 +233,8 @@ class ProfilePage extends StatelessWidget {
                 ],
               ),
               const SizedBox(height: 60),
-              // Name and Role
+
+              // Name and Role text
               Text(
                 user.userName,
                 style: const TextStyle(
@@ -179,58 +253,45 @@ class ProfilePage extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 30),
-              // Menu Items
+
+              // Menu items
               Expanded(
                 child: ListView(
                   padding: const EdgeInsets.symmetric(horizontal: 24),
                   children: [
-                    _menuItem(
-                      Icons.edit_outlined,
-                      "Edit Profil",
-                      () {
-                        Navigator.push(
+                    _menuItem(Icons.edit_outlined, "Edit Profil", () {
+                      Navigator.push(
                           context,
                           MaterialPageRoute(
-                              builder: (_) => const EditProfilePage()),
-                        );
-                      },
-                    ),
-                    _menuItem(
-                      Icons.notifications_outlined,
-                      "Notifikasi",
-                      () => Navigator.push(
+                              builder: (_) => const EditProfilePage()));
+                    }),
+                    _menuItem(Icons.notifications_outlined, "Notifikasi", () {
+                      Navigator.push(
                         context,
                         MaterialPageRoute(
-                          builder: (_) => user.userRole == "Admin"
-                              ? const NotifikasiAdminPage()
-                              : const NotifikasiPage(),
+                          builder: (_) =>
+                              (user.userRole.toLowerCase() == 'admin')
+                                  ? const NotifikasiAdminPage()
+                                  : const NotifikasiPage(),
                         ),
-                      ),
-                    ),
-
-                    _menuItem(
-                      Icons.help_outline,
-                      "FAQ",
-                      () => Navigator.push(
+                      );
+                    }),
+                    _menuItem(Icons.help_outline, "FAQ", () {
+                      Navigator.push(
                         context,
                         MaterialPageRoute(
-                          builder: (_) => user.userRole == "Admin"
-                              ? const FaqAdminPage()
-                              : const FaqPage(),
+                          builder: (_) =>
+                              (user.userRole.toLowerCase() == 'admin')
+                                  ? const FaqAdminPage()
+                                  : const FaqPage(),
                         ),
-                      ),
-                    ),
-
+                      );
+                    }),
                     const SizedBox(height: 30),
-
-                    // ========================================
-                    // TOMBOL LOG OUT - GUNAKAN LogoutDialog.show()
-                    // ========================================
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 8),
                       child: ElevatedButton(
                         onPressed: () {
-                          // PENTING: Panggil LogoutDialog.show() untuk menampilkan pop-up
                           LogoutDialog.show(context);
                         },
                         style: ElevatedButton.styleFrom(
@@ -282,11 +343,7 @@ class ProfilePage extends StatelessWidget {
                 color: const Color(0xFF36546C),
                 borderRadius: BorderRadius.circular(12),
               ),
-              child: Icon(
-                icon,
-                color: Colors.white,
-                size: 22,
-              ),
+              child: Icon(icon, color: Colors.white, size: 22),
             ),
             const SizedBox(width: 16),
             Text(
@@ -298,130 +355,141 @@ class ProfilePage extends StatelessWidget {
               ),
             ),
             const Spacer(),
-            const Icon(
-              Icons.arrow_forward_ios_rounded,
-              size: 16,
-              color: Color(0xFF9E9E9E),
-            ),
+            const Icon(Icons.arrow_forward_ios_rounded,
+                size: 16, color: Color(0xFF9E9E9E)),
           ],
         ),
       ),
     );
   }
 
-  Widget getHomeByRole(String role) {
-    switch (role) {
-      case "Admin":
-        return const HomeAdmin();
-      default:
-        return const HomePageUser();
-    }
-  }
-
   Widget _buildBottomNav(BuildContext context) {
-    return Stack(
-      clipBehavior: Clip.none,
-      alignment: Alignment.topCenter,
-      children: [
-        Container(
-          height: 70,
-          decoration: BoxDecoration(
-            color: Colors.white,
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.08),
-                blurRadius: 20,
-                offset: const Offset(0, -4),
-              ),
-            ],
-          ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-            children: [
-              GestureDetector(
-                onTap: () async {
-                  final uid = FirebaseAuth.instance.currentUser!.uid;
-
-                  // ambil data user dari Firestore
-                  final userDoc = await FirebaseFirestore.instance
-                      .collection('users')
-                      .doc(uid)
-                      .get();
-
-                  final userRole = userDoc['user_role'];
-                  Navigator.pushReplacement(
-                    context,
-                    MaterialPageRoute(builder: (_) => getHomeByRole(userRole)),
-                  );
-                },
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
+    return SafeArea(
+      child: SizedBox(
+        height: 70,
+        child: Stack(
+          clipBehavior: Clip.none,
+          alignment: Alignment.topCenter,
+          children: [
+            Positioned.fill(
+              top: 20,
+              child: Container(
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.08),
+                      blurRadius: 20,
+                      offset: const Offset(0, -4),
+                    ),
+                  ],
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                   children: [
-                    Icon(Icons.home_outlined,
-                        color: Colors.grey[400], size: 28),
-                    const SizedBox(height: 4),
-                    Text(
-                      "Beranda",
-                      style: TextStyle(
-                        color: Colors.grey[400],
-                        fontSize: 11,
-                        fontWeight: FontWeight.w500,
+                    GestureDetector(
+                      onTap: _goToHome,
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.home_outlined,
+                              color: Colors.grey[400], size: 28),
+                          const SizedBox(height: 4),
+                          Text(
+                            "Beranda",
+                            style: TextStyle(
+                              color: Colors.grey[400],
+                              fontSize: 11,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 80),
+                    GestureDetector(
+                      onTap: _goToProfile,
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: const [
+                          Icon(Icons.person,
+                              size: 28, color: Color(0xFF36546C)),
+                          SizedBox(height: 4),
+                          Text(
+                            "Profile",
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              color: Color(0xFF36546C),
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ],
                 ),
               ),
-              const SizedBox(width: 80),
-              const Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.person, size: 28, color: Color(0xFF36546C)),
-                  SizedBox(height: 4),
-                  Text(
-                    "Profile",
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      color: Color(0xFF36546C),
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                    ),
+            ),
+
+            // floating center button: icon berdasarkan userRole
+            Positioned(
+              top: -20,
+              child: GestureDetector(
+                onTap: () async {
+                  // jika belum ada userRole, boleh tampilkan default behaviour tapi di sini kita cegah
+                  if (userRole == null) return;
+
+                  if (_isAdmin) {
+                    await Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const BuatQRPage()),
+                    );
+                  } else {
+                    final result = await Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const QRScannerPage()),
+                    );
+
+                    if (!mounted) return;
+                    if (result != null) {
+                      setState(() => _lastScannedData = result);
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text("QR Code berhasil dipindai!"),
+                          backgroundColor: Colors.green,
+                        ),
+                      );
+                    }
+                  }
+                },
+                child: Container(
+                  width: 70,
+                  height: 70,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF36546C),
+                    shape: BoxShape.circle,
+                    border: Border.all(color: Colors.white, width: 4),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.20),
+                        blurRadius: 15,
+                        offset: const Offset(0, 5),
+                      )
+                    ],
                   ),
-                ],
-              )
-            ],
-          ),
-        ),
-        Positioned(
-          top: -20,
-          child: GestureDetector(
-            onTap: () async {
-              await Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => BuatQRPage()),
-              );
-            },
-            child: Container(
-              width: 70,
-              height: 70,
-              decoration: BoxDecoration(
-                color: Color(0xFF36546C),
-                shape: BoxShape.circle,
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.2),
-                    blurRadius: 15,
-                    offset: Offset(0, 5),
+                  child: Icon(
+                    // Perbandingan tanpa case-sensitivity
+                    _isAdmin ? Icons.add : Icons.qr_code_scanner,
+                    color: Colors.white,
+                    size: _isAdmin ? 38 : 32,
                   ),
-                ],
-                border: Border.all(color: Colors.white, width: 4),
-              ),
-              child: Center(
-                child: Icon(Icons.add, color: Colors.white, size: 38),
+                ),
               ),
             ),
-          ),
+          ],
         ),
-      ],
+      ),
     );
   }
 }

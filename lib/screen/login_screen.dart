@@ -4,9 +4,7 @@ import 'package:google_sign_in/google_sign_in.dart';
 import 'package:flutter_facebook_auth/flutter_facebook_auth.dart';
 
 class LoginScreen extends StatefulWidget {
-  final Function() onRegisterTap;
-
-  const LoginScreen({super.key, required this.onRegisterTap});
+  const LoginScreen({super.key});
 
   @override
   State<LoginScreen> createState() => _LoginScreenState();
@@ -93,74 +91,6 @@ class _LoginScreenState extends State<LoginScreen> {
               borderRadius: BorderRadius.only(
                 bottomLeft: Radius.circular(40),
                 bottomRight: Radius.circular(40),
-              ),
-            ),
-          ),
-
-          // ================= TAB SWITCHER =================
-          Transform.translate(
-            offset: const Offset(0, -40),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              child: Container(
-                height: 55,
-                decoration: BoxDecoration(
-                  color: Colors.grey.shade200,
-                  borderRadius: BorderRadius.circular(40),
-                ),
-                child: LayoutBuilder(
-                  builder: (context, constraints) {
-                    double tabWidth = constraints.maxWidth / 2;
-
-                    return Stack(
-                      children: [
-                        AnimatedPositioned(
-                          duration: const Duration(milliseconds: 250),
-                          curve: Curves.easeInOut,
-                          left: _selectedIndex == 0 ? 0 : tabWidth,
-                          child: Container(
-                            height: 55,
-                            width: tabWidth,
-                            decoration: BoxDecoration(
-                              gradient: const LinearGradient(
-                                colors: [Colors.deepOrange, Colors.redAccent],
-                              ),
-                              borderRadius: BorderRadius.circular(40),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.deepOrange.withOpacity(0.3),
-                                  blurRadius: 8,
-                                  offset: const Offset(0, 2),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: _tabButton(
-                                "Sign In",
-                                _selectedIndex == 0,
-                                () => setState(() => _selectedIndex = 0),
-                              ),
-                            ),
-                            Expanded(
-                              child: _tabButton(
-                                "Register",
-                                _selectedIndex == 1,
-                                () {
-                                  setState(() => _selectedIndex = 1);
-                                  widget.onRegisterTap();
-                                },
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    );
-                  },
-                ),
               ),
             ),
           ),

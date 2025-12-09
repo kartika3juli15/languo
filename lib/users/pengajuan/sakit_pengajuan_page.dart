@@ -17,13 +17,14 @@ class _PengajuanSakitPageState extends State<PengajuanSakitPage> {
   final _auth = FirebaseAuth.instance;
 
   int selectedTab = 0;
-  DateTime? startDate;
-  DateTime? endDate;
+  DateTime? tanggalMulai;
+  DateTime? tanggalSelesai;
 
   Uint8List? lampiranBytes;
   String? lampiranName;
 
   final TextEditingController keteranganController = TextEditingController();
+  final TextEditingController diagnosaController = TextEditingController();
 
   bool isSubmitted = false; // setelah sukses true -> tombol utama disable
   bool isLoading = false; // hanya menandakan proses submit sedang berjalan
@@ -32,21 +33,21 @@ class _PengajuanSakitPageState extends State<PengajuanSakitPage> {
   Future<void> pickStartDate() async {
     final picked = await showDatePicker(
       context: context,
-      initialDate: startDate ?? DateTime.now(),
+      initialDate: tanggalMulai ?? DateTime.now(),
       firstDate: DateTime(2000),
       lastDate: DateTime(2100),
     );
-    if (picked != null) setState(() => startDate = picked);
+    if (picked != null) setState(() => tanggalMulai = picked);
   }
 
   Future<void> pickEndDate() async {
     final picked = await showDatePicker(
       context: context,
-      initialDate: endDate ?? (startDate ?? DateTime.now()),
+      initialDate: tanggalSelesai ?? (tanggalMulai ?? DateTime.now()),
       firstDate: DateTime(2000),
       lastDate: DateTime(2100),
     );
-    if (picked != null) setState(() => endDate = picked);
+    if (picked != null) setState(() => tanggalSelesai = picked);
   }
 
   // ======================== LAMPIRAN ========================
@@ -74,7 +75,11 @@ class _PengajuanSakitPageState extends State<PengajuanSakitPage> {
 
   // ======================== VALIDASI SEBELUM MENUNJUKKAN DIALOG ========================
   bool _validateFormShowMessageIfInvalid() {
-    if (startDate == null || endDate == null) {
+    if (diagnosaController.text.isEmpty) {
+      _showMessage("Diagnosa sakit belum diisi");
+      return false;
+    }
+    if (tanggalMulai == null || tanggalSelesai == null) {
       _showMessage("Tanggal belum dipilih");
       return false;
     }
@@ -231,16 +236,12 @@ class _PengajuanSakitPageState extends State<PengajuanSakitPage> {
   // ======================== KIRIM DATA (RETURN BOOL) ========================
   /// melakukan upload & simpan. Mengembalikan true jika berhasil, false jika gagal.
   Future<bool> submitForm() async {
-    if (startDate == null || endDate == null) {
+    if (tanggalMulai == null || tanggalSelesai == null) {
       _showMessage("Tanggal belum dipilih");
       return false;
     }
     if (lampiranBytes == null || lampiranName == null) {
       _showMessage("Lampiran belum diupload");
-      return false;
-    }
-    if (keteranganController.text.isEmpty) {
-      _showMessage("Keterangan masih kosong");
       return false;
     }
 
@@ -249,8 +250,9 @@ class _PengajuanSakitPageState extends State<PengajuanSakitPage> {
 
       await _sakitService.kirimPengajuan(
         userId: userId,
-        startDate: startDate!,
-        endDate: endDate!,
+        diagnosa: diagnosaController.text,
+        tanggalMulai: tanggalMulai!,
+        tanggalSelesai: tanggalSelesai!,
         keterangan: keteranganController.text,
         lampiranBytes: lampiranBytes!,
         fileName: lampiranName!,
@@ -259,10 +261,11 @@ class _PengajuanSakitPageState extends State<PengajuanSakitPage> {
       // reset form setelah berhasil
       setState(() {
         isSubmitted = true;
-        startDate = null;
-        endDate = null;
+        tanggalMulai = null;
+        tanggalSelesai = null;
         lampiranBytes = null;
         lampiranName = null;
+        diagnosaController.clear();
         keteranganController.clear();
       });
 
@@ -415,6 +418,23 @@ class _PengajuanSakitPageState extends State<PengajuanSakitPage> {
       padding: const EdgeInsets.symmetric(horizontal: 20),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         const SizedBox(height: 10),
+        const Text("Diagnosa Sakit",
+            style: TextStyle(
+                color: Color(0xFF7F7F7F), fontWeight: FontWeight.w600)),
+        const SizedBox(height: 8),
+        Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: const Color(0xFFF3F7F7),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: TextField(
+            controller: diagnosaController,
+            decoration: const InputDecoration(
+                hintText: "Tulis diagnosa sakit...", border: InputBorder.none),
+          ),
+        ),
+        const SizedBox(height: 25),
         const Text("Tanggal",
             style: TextStyle(
                 color: Color(0xFF7F7F7F), fontWeight: FontWeight.w600)),
@@ -424,17 +444,17 @@ class _PengajuanSakitPageState extends State<PengajuanSakitPage> {
             Expanded(
                 child: GestureDetector(
               onTap: pickStartDate,
-              child: _dateBox(startDate == null
+              child: _dateBox(tanggalMulai == null
                   ? "Pilih Tanggal"
-                  : "${startDate!.day} ${_monthName(startDate!.month)} ${startDate!.year}"),
+                  : "${tanggalMulai!.day} ${_monthName(tanggalMulai!.month)} ${tanggalMulai!.year}"),
             )),
             const SizedBox(width: 10),
             Expanded(
                 child: GestureDetector(
               onTap: pickEndDate,
-              child: _dateBox(endDate == null
+              child: _dateBox(tanggalSelesai == null
                   ? "Pilih Tanggal"
-                  : "${endDate!.day} ${_monthName(endDate!.month)} ${endDate!.year}"),
+                  : "${tanggalSelesai!.day} ${_monthName(tanggalSelesai!.month)} ${tanggalSelesai!.year}"),
             )),
           ],
         ),
@@ -486,7 +506,7 @@ class _PengajuanSakitPageState extends State<PengajuanSakitPage> {
             ),
           ),
         const SizedBox(height: 20),
-        const Text("Keterangan",
+        const Text("Keterangan (Opsional)",
             style: TextStyle(
                 color: Color(0xFF7F7F7F), fontWeight: FontWeight.w600)),
         const SizedBox(height: 8),

@@ -12,16 +12,53 @@ class AdminKehadiranPage extends StatefulWidget {
 class _AdminKehadiranPageState extends State<AdminKehadiranPage> {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
-  // tab state: 0 = Dosen, 1 = Karyawan
   int selectedTabIndex = 0;
   String get selectedTabLabel => selectedTabIndex == 0 ? 'Dosen' : 'Karyawan';
-  String get selectedCollection => selectedTabIndex == 0 ? 'dosen' : 'karyawan';
 
   final TextEditingController searchController = TextEditingController();
 
-  // stream snapshots for users (dosen/karyawan) and absensi
-  Stream<QuerySnapshot> usersStream(String coll) =>
-      _firestore.collection(coll).snapshots();
+  /// CEK APAKAH USER ADA DI COLLECTION DOSEN/KARYAWAN/USERS
+  Future<Map<String, dynamic>?> _getUserInfo(String userId) async {
+    try {
+      // Cek collection dosen
+      var doc = await _firestore.collection('dosen').doc(userId).get();
+      if (doc.exists) {
+        final data = doc.data() as Map<String, dynamic>;
+        return {
+          'nama': data['nama'] ?? data['name'] ?? 'Tanpa Nama',
+          'email': data['email'] ?? 'Tanpa Email',
+          'role': 'dosen',
+        };
+      }
+
+      // Cek collection karyawan
+      doc = await _firestore.collection('karyawan').doc(userId).get();
+      if (doc.exists) {
+        final data = doc.data() as Map<String, dynamic>;
+        return {
+          'nama': data['nama'] ?? data['name'] ?? 'Tanpa Nama',
+          'email': data['email'] ?? 'Tanpa Email',
+          'role': 'karyawan',
+        };
+      }
+
+      // Cek collection users (fallback)
+      doc = await _firestore.collection('users').doc(userId).get();
+      if (doc.exists) {
+        final data = doc.data() as Map<String, dynamic>;
+        return {
+          'nama': data['user_name'] ?? data['nama'] ?? data['name'] ?? 'Tanpa Nama',
+          'email': data['user_email'] ?? data['email'] ?? 'Tanpa Email',
+          'role': (data['user_role'] ?? 'karyawan').toString().toLowerCase(),
+        };
+      }
+
+      return null;
+    } catch (e) {
+      debugPrint('Error getting user info: $e');
+      return null;
+    }
+  }
 
   Stream<QuerySnapshot> absensiStream() {
     try {
@@ -30,13 +67,11 @@ class _AdminKehadiranPageState extends State<AdminKehadiranPage> {
           .orderBy('date', descending: true)
           .snapshots();
     } catch (e) {
-      // Jika orderBy error (missing index), fallback tanpa orderBy
       debugPrint('Error orderBy absensi: $e');
       return _firestore.collection('absensi').snapshots();
     }
   }
 
-  // format tanggal display
   String _formatDisplayDate(dynamic firestoreDate) {
     try {
       DateTime dt;
@@ -56,17 +91,14 @@ class _AdminKehadiranPageState extends State<AdminKehadiranPage> {
     }
   }
 
-  // compute status
   String computeStatus(String checkIn, String checkOut) {
     if (checkIn.isEmpty) return 'Proses';
     if (checkOut.isEmpty) return 'Proses';
     return 'Sudah Absen';
   }
 
-  // warna jam (hijau jika ada, abu jika kosong)
   Color jamColor(String jam) => jam.isEmpty ? Colors.grey : Colors.green;
 
-  // delete absensi doc
   Future<void> _deleteAbsensi(String docId) async {
     try {
       await _firestore.collection('absensi').doc(docId).delete();
@@ -88,7 +120,6 @@ class _AdminKehadiranPageState extends State<AdminKehadiranPage> {
     }
   }
 
-  // confirm delete
   void _confirmDelete(String docId) {
     showDialog(
       context: context,
@@ -111,7 +142,6 @@ class _AdminKehadiranPageState extends State<AdminKehadiranPage> {
     );
   }
 
-  // filter absensi by search (name/email)
   bool _matchesSearch(String query, String nama, String email) {
     if (query.isEmpty) return true;
     final q = query.toLowerCase();
@@ -124,7 +154,6 @@ class _AdminKehadiranPageState extends State<AdminKehadiranPage> {
     super.dispose();
   }
 
-  // UI BUILD
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -136,7 +165,7 @@ class _AdminKehadiranPageState extends State<AdminKehadiranPage> {
           const SizedBox(height: 8),
           _buildSearchBar(),
           const SizedBox(height: 12),
-          Expanded(child: _buildCombinedList()),
+          Expanded(child: _buildAbsensiList()),
         ],
       ),
     );
@@ -280,21 +309,19 @@ class _AdminKehadiranPageState extends State<AdminKehadiranPage> {
     );
   }
 
-  /// Combine users (dosen/karyawan) stream + absensi stream,
-  /// join in memory and filter for the selected role.
-  Widget _buildCombinedList() {
+  Widget _buildAbsensiList() {
     return StreamBuilder<QuerySnapshot>(
-      stream: usersStream(selectedCollection),
-      builder: (context, usersSnapshot) {
-        if (usersSnapshot.hasError) {
+      stream: absensiStream(),
+      builder: (context, snapshot) {
+        if (snapshot.hasError) {
           return Center(
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 const Icon(Icons.error_outline, size: 64, color: Colors.red),
                 const SizedBox(height: 16),
-                Text('Error: ${usersSnapshot.error}'),
-                const SizedBox(height: 8),
+                Text('Error: ${snapshot.error}'),
+                const SizedBox(height: 16),
                 ElevatedButton(
                   onPressed: () => setState(() {}),
                   child: const Text('Coba Lagi'),
@@ -303,124 +330,36 @@ class _AdminKehadiranPageState extends State<AdminKehadiranPage> {
             ),
           );
         }
-        if (!usersSnapshot.hasData) {
+
+        if (!snapshot.hasData) {
           return const Center(child: CircularProgressIndicator());
         }
 
-        final usersDocs = usersSnapshot.data!.docs;
-        
-        // Debug: print jumlah user
-        debugPrint('Total ${selectedTabLabel}: ${usersDocs.length}');
-        
-        // map userId -> userData
-        final Map<String, Map<String, dynamic>> usersMap = {};
-        for (var u in usersDocs) {
-          final data = u.data() as Map<String, dynamic>;
-          usersMap[u.id] = data;
-          // Debug: print user info
-          debugPrint('User ${u.id}: ${data['nama'] ?? data['name'] ?? 'No name'}');
-        }
+        final docs = snapshot.data!.docs;
 
-        if (usersMap.isEmpty) {
+        if (docs.isEmpty) {
           return Center(
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(Icons.people_outline, size: 64, color: Colors.grey[400]),
+                Icon(Icons.search_off, size: 64, color: Colors.grey[400]),
                 const SizedBox(height: 16),
-                Text('Tidak ada data $selectedTabLabel',
-                    style: TextStyle(fontSize: 16, color: Colors.grey[600])),
+                const Text('Tidak ada data absensi',
+                    style: TextStyle(fontSize: 16, color: Colors.grey)),
               ],
             ),
           );
         }
 
-        // now listen to absensi
-        return StreamBuilder<QuerySnapshot>(
-          stream: absensiStream(),
-          builder: (context, absSnapshot) {
-            if (absSnapshot.hasError) {
-              return Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const Icon(Icons.error_outline, size: 64, color: Colors.red),
-                    const SizedBox(height: 16),
-                    Text('Error absensi: ${absSnapshot.error}'),
-                    const SizedBox(height: 8),
-                    const Text(
-                      'Pastikan Firestore index sudah dibuat',
-                      style: TextStyle(fontSize: 12, color: Colors.grey),
-                      textAlign: TextAlign.center,
-                    ),
-                  ],
-                ),
-              );
-            }
-            if (!absSnapshot.hasData) {
+        // Process documents asynchronously
+        return FutureBuilder<List<Map<String, dynamic>>>(
+          future: _processAbsensiDocs(docs),
+          builder: (context, processSnapshot) {
+            if (!processSnapshot.hasData) {
               return const Center(child: CircularProgressIndicator());
             }
 
-            final absDocs = absSnapshot.data!.docs;
-            
-            // Debug: print jumlah absensi
-            debugPrint('Total absensi records: ${absDocs.length}');
-
-            // build list of combined entries where abs.user_id exists in usersMap
-            final List<_CombinedEntry> combined = [];
-
-            for (var a in absDocs) {
-              final aData = a.data() as Map<String, dynamic>;
-              final userId = (aData['user_id'] ?? '').toString().trim();
-              
-              // Debug: print absensi info
-              debugPrint('Absensi ${a.id}: user_id=$userId');
-              
-              if (userId.isEmpty) {
-                debugPrint('  -> Skipped: user_id kosong');
-                continue;
-              }
-              
-              if (!usersMap.containsKey(userId)) {
-                debugPrint('  -> Skipped: user_id tidak ditemukan di $selectedCollection');
-                continue; // skip absensi not for this role
-              }
-
-              final user = usersMap[userId]!;
-              final nama = (user['nama'] ?? user['name'] ?? 'Tanpa Nama').toString();
-              final email = (user['email'] ?? 'Tanpa Email').toString();
-
-              // read fields from absensi
-              final checkIn = (aData['check_in'] ?? '').toString();
-              final checkOut = (aData['check_out'] ?? '').toString();
-              final date = aData['date'];
-              final tanggal = _formatDisplayDate(date);
-
-              final status = computeStatus(checkIn, checkOut);
-
-              // search filter
-              final query = searchController.text.trim();
-              if (!_matchesSearch(query, nama, email)) {
-                debugPrint('  -> Skipped: tidak cocok dengan search query');
-                continue;
-              }
-
-              debugPrint('  -> Added to list: $nama');
-
-              combined.add(_CombinedEntry(
-                absId: a.id,
-                userId: userId,
-                nama: nama,
-                email: email,
-                checkIn: checkIn,
-                checkOut: checkOut,
-                tanggal: tanggal,
-                status: status,
-                rawAbsensi: aData,
-              ));
-            }
-
-            debugPrint('Total combined entries for $selectedTabLabel: ${combined.length}');
+            final combined = processSnapshot.data!;
 
             if (combined.isEmpty) {
               return Center(
@@ -429,14 +368,13 @@ class _AdminKehadiranPageState extends State<AdminKehadiranPage> {
                   children: [
                     Icon(Icons.search_off, size: 64, color: Colors.grey[400]),
                     const SizedBox(height: 16),
-                    Text('Tidak ada data kehadiran $selectedTabLabel',
-                        style: TextStyle(fontSize: 16, color: Colors.grey[600])),
+                    Text('Tidak ada data $selectedTabLabel',
+                        style: const TextStyle(fontSize: 16, color: Colors.grey)),
                     const SizedBox(height: 8),
-                    Text(
-                      searchController.text.isNotEmpty
-                          ? 'Coba kata kunci pencarian lain'
-                          : 'Belum ada data absensi untuk $selectedTabLabel',
-                      style: TextStyle(fontSize: 12, color: Colors.grey[500]),
+                    const Text(
+                      'Pastikan user sudah terdaftar di Firestore',
+                      style: TextStyle(fontSize: 12, color: Colors.grey),
+                      textAlign: TextAlign.center,
                     ),
                   ],
                 ),
@@ -448,7 +386,15 @@ class _AdminKehadiranPageState extends State<AdminKehadiranPage> {
               itemCount: combined.length,
               itemBuilder: (context, idx) {
                 final item = combined[idx];
-                return _buildAdminCard(item);
+                return _buildAdminCard(
+                  docId: item['docId'],
+                  nama: item['nama'],
+                  email: item['email'],
+                  checkIn: item['checkIn'],
+                  checkOut: item['checkOut'],
+                  tanggal: item['tanggal'],
+                  status: item['status'],
+                );
               },
             );
           },
@@ -457,7 +403,70 @@ class _AdminKehadiranPageState extends State<AdminKehadiranPage> {
     );
   }
 
-  Widget _buildAdminCard(_CombinedEntry item) {
+  Future<List<Map<String, dynamic>>> _processAbsensiDocs(
+      List<QueryDocumentSnapshot> docs) async {
+    final List<Map<String, dynamic>> combined = [];
+    final selectedRole = selectedTabIndex == 0 ? 'dosen' : 'karyawan';
+
+    for (var doc in docs) {
+      final data = doc.data() as Map<String, dynamic>;
+      final userId = (data['user_id'] ?? '').toString().trim();
+
+      if (userId.isEmpty) continue;
+
+      // Ambil info user dari berbagai collection
+      final userInfo = await _getUserInfo(userId);
+      
+      if (userInfo == null) {
+        debugPrint('User $userId tidak ditemukan di collection manapun');
+        continue;
+      }
+
+      // Filter by role
+      if (userInfo['role'] != selectedRole) {
+        debugPrint('User $userId role=${userInfo['role']}, skip (bukan $selectedRole)');
+        continue;
+      }
+
+      // Ambil data dari absensi atau user info
+      String nama = (data['nama'] ?? userInfo['nama']).toString();
+      String email = (data['email'] ?? userInfo['email']).toString();
+
+      final checkIn = (data['check_in'] ?? '').toString();
+      final checkOut = (data['check_out'] ?? '').toString();
+      final tanggal = _formatDisplayDate(data['date']);
+      final status = computeStatus(checkIn, checkOut);
+
+      // Search filter
+      final query = searchController.text.trim();
+      if (!_matchesSearch(query, nama, email)) continue;
+
+      debugPrint('Added: $nama ($selectedRole)');
+
+      combined.add({
+        'docId': doc.id,
+        'nama': nama,
+        'email': email,
+        'checkIn': checkIn,
+        'checkOut': checkOut,
+        'tanggal': tanggal,
+        'status': status,
+      });
+    }
+
+    debugPrint('Total $selectedRole: ${combined.length}');
+    return combined;
+  }
+
+  Widget _buildAdminCard({
+    required String docId,
+    required String nama,
+    required String email,
+    required String checkIn,
+    required String checkOut,
+    required String tanggal,
+    required String status,
+  }) {
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
       padding: const EdgeInsets.all(16),
@@ -474,11 +483,9 @@ class _AdminKehadiranPageState extends State<AdminKehadiranPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // row top: avatar | nama,email | badge
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Avatar placeholder
               Container(
                 width: 44,
                 height: 44,
@@ -487,34 +494,32 @@ class _AdminKehadiranPageState extends State<AdminKehadiranPage> {
                 child: const Icon(Icons.person, color: Colors.white, size: 26),
               ),
               const SizedBox(width: 12),
-              // name & email
               Expanded(
                 child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(item.nama,
+                      Text(nama,
                           style: const TextStyle(
                               fontSize: 15,
                               fontWeight: FontWeight.bold,
                               color: Colors.black87)),
                       const SizedBox(height: 3),
-                      Text(item.email,
+                      Text(email,
                           style: const TextStyle(
                               fontSize: 12, color: Color(0xFF757575))),
                     ]),
               ),
-              // badge status (Sudah Absen / Proses)
               Container(
                 padding:
                     const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                 decoration: BoxDecoration(
-                  color: item.status == 'Sudah Absen'
+                  color: status == 'Sudah Absen'
                       ? const Color(0xFF5CB85C)
                       : const Color(0xFFFFA500),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Text(
-                  item.status == 'Sudah Absen' ? 'sudah absen' : 'proses',
+                  status == 'Sudah Absen' ? 'sudah absen' : 'proses',
                   style: const TextStyle(
                       color: Colors.white,
                       fontSize: 10,
@@ -524,18 +529,16 @@ class _AdminKehadiranPageState extends State<AdminKehadiranPage> {
             ],
           ),
           const SizedBox(height: 12),
-          // details rows
-          _infoRow('Hari, Tgl', item.tanggal),
-          _infoRow('Masuk', item.checkIn.isEmpty ? '--:--' : item.checkIn,
-              jamColor(item.checkIn)),
-          _infoRow('Keluar', item.checkOut.isEmpty ? '--:--' : item.checkOut,
-              jamColor(item.checkOut)),
+          _infoRow('Hari, Tgl', tanggal),
+          _infoRow('Masuk', checkIn.isEmpty ? '--:--' : checkIn,
+              jamColor(checkIn)),
+          _infoRow('Keluar', checkOut.isEmpty ? '--:--' : checkOut,
+              jamColor(checkOut)),
           const SizedBox(height: 10),
-          // actions (hapus)
           Align(
             alignment: Alignment.centerRight,
             child: ElevatedButton.icon(
-              onPressed: () => _confirmDelete(item.absId),
+              onPressed: () => _confirmDelete(docId),
               icon: const Icon(Icons.delete, size: 16, color: Colors.white),
               label: const Text('Hapus',
                   style: TextStyle(
@@ -584,29 +587,4 @@ class _AdminKehadiranPageState extends State<AdminKehadiranPage> {
       ]),
     );
   }
-}
-
-// small model for joined entry
-class _CombinedEntry {
-  final String absId;
-  final String userId;
-  final String nama;
-  final String email;
-  final String checkIn;
-  final String checkOut;
-  final String tanggal;
-  final String status;
-  final Map<String, dynamic> rawAbsensi;
-
-  _CombinedEntry({
-    required this.absId,
-    required this.userId,
-    required this.nama,
-    required this.email,
-    required this.checkIn,
-    required this.checkOut,
-    required this.tanggal,
-    required this.status,
-    required this.rawAbsensi,
-  });
 }

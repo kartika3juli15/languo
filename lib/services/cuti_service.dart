@@ -55,6 +55,7 @@ class CutiService {
     String? keterangan,
     Uint8List? lampiranBytes,
     String? fileName,
+    DateTime? tanggalVerifikasi,
     required num? sisaCutiSaatPengajuan,
   }) async {
     try {
@@ -66,7 +67,7 @@ class CutiService {
 
       final userName = userDoc.data()?["user_name"] ?? "-";
       final userRole = userDoc.data()?["user_role"] ?? "-";
-      final emailUser = userDoc.data()?["user_email"] ?? "-";
+      final userEmail = userDoc.data()?["user_email"] ?? "-";
 
       String? lampiranUrl;
       String? storagePath;
@@ -78,25 +79,26 @@ class CutiService {
           fileName: fileName,
           userId: userId,
         );
-        lampiranUrl = uploadResult['lampiranUrl'];
-        storagePath = uploadResult['storagePath'];
+        lampiranUrl = uploadResult['lampiran_url'];
+        storagePath = uploadResult['storage_path'];
       }
 
       // Simpan pengajuan cuti ke Firestore
       await _firestore.collection("pengajuan_cuti").add({
-        "userId": userId,
-        "userName": userName,
-        "emailUser": emailUser,
-        "userRole": userRole,
-        "tanggalMulai": Timestamp.fromDate(startDate),
-        "tanggalSelesai": Timestamp.fromDate(endDate),
+        "user_id": userId,
+        "user_name": userName,
+        "user_email": userEmail,
+        "user_role": userRole,
+        "tanggal_mulai": Timestamp.fromDate(startDate),
+        "tanggal_selesai": Timestamp.fromDate(endDate),
         "alasan": alasan,
-        "lampiranUrl": lampiranUrl,
-        "storagePath": storagePath,
+        "lampiran_url": lampiranUrl,
+        "storage_path": storagePath,
         "status": "Diajukan",
         "keterangan": keterangan,
-        "sisaCuti": sisaCutiSaatPengajuan,
-        "createdAt": FieldValue.serverTimestamp(),
+        "sisa_cuti": sisaCutiSaatPengajuan,
+        "created_at": FieldValue.serverTimestamp(),
+        "tanggal_verifikasi": tanggalVerifikasi,
       });
     } catch (e) {
       debugPrint("Error kirimPengajuan Cuti: $e");
@@ -108,8 +110,8 @@ class CutiService {
   Stream<QuerySnapshot> getRekapanCuti(String uid) {
     return _firestore
         .collection("pengajuan_cuti")
-        .where("userId", isEqualTo: uid)
-        .orderBy("createdAt", descending: true)
+        .where("user_id", isEqualTo: uid)
+        .orderBy("created_at", descending: true)
         .snapshots();
   }
 
@@ -123,8 +125,13 @@ class CutiService {
         throw Exception("Dokumen cuti tidak ditemukan.");
       }
 
-      final data = cutiDoc.data();
-      final storagePath = data?['storagePath'] as String?;
+      final data = cutiDoc.data() ?? {};
+      String? storagePath;
+      if (data.containsKey('storage_path')) {
+        storagePath = data['storage_path'] as String?;
+      } else if (data.containsKey('storagePath')) {
+        storagePath = data['storagePath'] as String?;
+      }
 
       // 1. Hapus Lampiran dari Firebase Storage (jika ada)
       if (storagePath != null && storagePath.isNotEmpty) {

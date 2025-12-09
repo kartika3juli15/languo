@@ -1,4 +1,3 @@
-// file: rekapan_izin_page_a.dart
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -14,12 +13,12 @@ class IzinRekapanData {
   final DateTime tanggalSelesai;
   final String status;
   final String? lampiranUrl;
-  final String? lampiranName;
+  final String? storagePath;
   final String keterangan;
   final DateTime tanggalPengajuan;
   final String userName;
   final String userEmail;
-  final String userClass;
+  final String userRole;
 
   IzinRekapanData({
     required this.id,
@@ -28,12 +27,12 @@ class IzinRekapanData {
     required this.tanggalSelesai,
     required this.status,
     this.lampiranUrl,
-    this.lampiranName,
+    this.storagePath,
     required this.keterangan,
     required this.tanggalPengajuan,
     required this.userName,
     required this.userEmail,
-    required this.userClass,
+    required this.userRole,
   });
 }
 
@@ -63,7 +62,6 @@ class _RekapanIzinPageState extends State<RekapanIzinPage> {
       return {
         'userName': 'Data Tidak Ditemukan',
         'userEmail': 'N/A',
-        'userClass': 'N/A',
       };
     }
 
@@ -76,18 +74,18 @@ class _RekapanIzinPageState extends State<RekapanIzinPage> {
       'userEmail': data?['user_email'] ??
           _auth.currentUser!.email ??
           'Email Tidak Ditetapkan',
-      'userClass':
-          data?['user_role'] ?? data?['kelas'] ?? 'Jabatan Tidak Ditetapkan',
+      'userRole': data?['user_role'] ?? 'Jabatan Tidak Ditetapkan',
     };
   }
 
   @override
   Widget build(BuildContext context) {
     final currentUser = _auth.currentUser;
-    if (currentUser == null)
+
+    if (currentUser == null) {
       return const Center(
           child: Text("Anda harus login untuk melihat rekapan."));
-
+    }
     return FutureBuilder<Map<String, String>>(
       future: _userDataFuture,
       builder: (context, userSnapshot) {
@@ -101,12 +99,9 @@ class _RekapanIzinPageState extends State<RekapanIzinPage> {
 
         final userData = userSnapshot.data!;
 
-        // ===== IMPORTANT: use a firestore query that only filters by userId (avoid composite index)
         final Stream<QuerySnapshot> stream = FirebaseFirestore.instance
             .collection('pengajuan_izin')
-            // try to query both possible field names by using "userId" (most likely) — if you persist another naming in DB,
-            // consider migrating; for now this query assumes stored field is "userId"
-            .where('userId', isEqualTo: currentUser.uid)
+            .where('user_id', isEqualTo: currentUser.uid)
             .snapshots();
 
         return Column(
@@ -145,36 +140,36 @@ class _RekapanIzinPageState extends State<RekapanIzinPage> {
                     final DateTime createdAt =
                         createdAtTs?.toDate() ?? DateTime.now();
 
-                    DateTime tglMulai;
-                    DateTime tglSelesai;
+                    DateTime tanggalMulai;
+                    DateTime tanggalSelesai;
                     try {
-                      tglMulai = (data['tanggalMulai'] as Timestamp).toDate();
+                      tanggalMulai =
+                          (data['tanggalMulai'] as Timestamp).toDate();
                     } catch (_) {
-                      tglMulai = DateTime.now();
+                      tanggalMulai = DateTime.now();
                     }
                     try {
-                      tglSelesai =
+                      tanggalSelesai =
                           (data['tanggalSelesai'] as Timestamp).toDate();
                     } catch (_) {
-                      tglSelesai = tglMulai;
+                      tanggalSelesai = tanggalMulai;
                     }
 
                     return IzinRekapanData(
                       id: d.id,
                       perihal: (data['perihal'] ?? 'Izin').toString(),
-                      tanggalMulai: tglMulai,
-                      tanggalSelesai: tglSelesai,
+                      tanggalMulai: tanggalMulai,
+                      tanggalSelesai: tanggalSelesai,
                       status: (data['status'] ?? 'Diajukan').toString(),
-                      lampiranUrl: (data['lampiranUrl'] ?? data['lampiran_url'])
-                          ?.toString(),
-                      lampiranName:
-                          (data['fileName'] ?? data['file_name'])?.toString() ??
-                              'Lampiran',
+                      lampiranUrl: (data['lampiran_url'])?.toString(),
+                      storagePath: (data['storage_path'])?.toString(),
                       keterangan: (data['keterangan'] ?? '-').toString(),
                       tanggalPengajuan: createdAt,
-                      userName: userData['userName']!,
-                      userEmail: userData['userEmail']!,
-                      userClass: userData['userClass']!,
+                      userName: userData['userName'] ?? 'Data Tidak Ditemukan',
+                      userEmail:
+                          userData['userEmail'] ?? 'Email Tidak Ditetapkan',
+                      userRole:
+                          userData['userRole'] ?? 'Jabatan Tidak Ditetapkan',
                     );
                   }).toList();
 
@@ -358,10 +353,10 @@ class _RekapanIzinPageState extends State<RekapanIzinPage> {
                   children: [
                     _buildDetailRow("Nama", izin.userName),
                     _buildDetailRow("Email", izin.userEmail),
-                    _buildDetailRow("Kelas/Jabatan", izin.userClass),
+                    _buildDetailRow("Jabatan", izin.userRole),
                     const SizedBox(height: 12),
-                    _buildDetailRow(
-                        "Tgl Pengajuan", _formatTanggal(izin.tanggalPengajuan)),
+                    _buildDetailRow("tanggal Pengajuan",
+                        _formatTanggal(izin.tanggalPengajuan)),
                     _buildDetailRow("Status", izin.status,
                         isStatus: true, statusColor: _statusColor(izin.status)),
                     _buildDetailRow("Keterangan",
@@ -374,8 +369,8 @@ class _RekapanIzinPageState extends State<RekapanIzinPage> {
                           onPressed: () => openPdf(izin.lampiranUrl!, context),
                           icon: const Icon(Icons.file_download,
                               size: 20, color: Colors.white),
-                          label: Text("Lihat Lampiran (${izin.lampiranName})",
-                              style: const TextStyle(
+                          label: const Text("Lihat Lampiran",
+                              style: TextStyle(
                                   color: Colors.white,
                                   fontWeight: FontWeight.w600)),
                           style: ElevatedButton.styleFrom(

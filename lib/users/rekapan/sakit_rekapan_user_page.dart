@@ -8,32 +8,31 @@ import 'package:url_launcher/url_launcher.dart';
 
 class SakitRekapanData {
   final String id;
-  final String perihal;
+  final String diagnosa;
   final DateTime tanggalMulai;
   final DateTime tanggalSelesai;
   final String status;
   final String? lampiranUrl;
-  final String? lampiranName;
+  final String? storagePath;
   final String keterangan;
   final DateTime tanggalPengajuan;
-
   final String userName;
   final String userEmail;
-  final String userClass;
+  final String userRole;
 
   SakitRekapanData({
     required this.id,
-    required this.perihal,
+    required this.diagnosa,
     required this.tanggalMulai,
     required this.tanggalSelesai,
     required this.status,
     this.lampiranUrl,
-    this.lampiranName,
+    this.storagePath,
     required this.keterangan,
     required this.tanggalPengajuan,
     required this.userName,
     required this.userEmail,
-    required this.userClass,
+    required this.userRole,
   });
 }
 
@@ -59,31 +58,22 @@ class _RekapanSakitPageState extends State<RekapanSakitPage> {
   Future<Map<String, String>> _fetchUserData() async {
     final userId = _auth.currentUser?.uid;
     if (userId == null) {
-      return {
-        'userName': 'Data Tidak Ditemukan',
-        'userEmail': 'N/A',
-        'userClass': 'N/A',
-      };
+      return {'userName': 'Data Tidak Ditemukan', 'userEmail': 'N/A'};
     }
-
     final userDoc =
         await FirebaseFirestore.instance.collection("users").doc(userId).get();
     final data = userDoc.data();
 
     return {
       'userName': data?['user_name'] ?? 'Data Tidak Ditemukan',
-      'userEmail': data?['user_email'] ??
-          _auth.currentUser!.email ??
-          'Email Tidak Ditetapkan',
-      'userClass':
-          data?['user_role'] ?? data?['kelas'] ?? 'Jabatan Tidak Ditetapkan',
+      'userEmail': data?['user_email'] ?? 'Email Tidak Ditetapkan',
+      'userRole': data?['user_role'] ?? 'Jabatan Tidak Ditetapkan',
     };
   }
 
   @override
   Widget build(BuildContext context) {
     final currentUser = _auth.currentUser;
-
     if (currentUser == null) {
       return const Center(
           child: Text("Anda harus login untuk melihat rekapan."));
@@ -96,76 +86,71 @@ class _RekapanSakitPageState extends State<RekapanSakitPage> {
           return const Center(child: CircularProgressIndicator());
         }
         if (userSnapshot.hasError) {
-          return Center(
-              child: Text('Error loading user data: ${userSnapshot.error}'));
+          return Center(child: Text('Error: ${userSnapshot.error}'));
         }
 
         final userData = userSnapshot.data!;
+        final stream = FirebaseFirestore.instance
+            .collection('pengajuan_sakit')
+            .where('user_id', isEqualTo: currentUser.uid)
+            .snapshots();
 
         return Column(
           children: [
             Expanded(
               child: StreamBuilder<QuerySnapshot>(
-                stream: _sakitService.getRekapanSakit(currentUser.uid),
+                stream: stream,
                 builder: (context, snapshot) {
-                  if (snapshot.hasError) {
+                  if (snapshot.hasError)
                     return Center(child: Text('Error: ${snapshot.error}'));
-                  }
                   if (snapshot.connectionState == ConnectionState.waiting) {
                     return const Center(child: CircularProgressIndicator());
                   }
 
                   final docs = snapshot.data?.docs ?? [];
-
                   if (docs.isEmpty) {
                     return const Center(
-                      child: Text(
-                        "Belum ada pengajuan sakit",
-                        style: TextStyle(fontSize: 18, color: Colors.grey),
-                      ),
+                      child: Text("Belum ada pengajuan sakit",
+                          style: TextStyle(fontSize: 18, color: Colors.grey)),
                     );
                   }
 
                   final sakitList = docs.map((d) {
                     final data = d.data() as Map<String, dynamic>;
 
-                    DateTime tglMulai =
-                        (data['tanggalMulai'] as Timestamp).toDate();
-                    DateTime tglSelesai =
-                        (data['tanggalSelesai'] as Timestamp).toDate();
-
-                    final createdAtTimestamp = data['createdAt'] as Timestamp?;
-
-                    DateTime tglPengajuan =
-                        createdAtTimestamp?.toDate() ?? DateTime.now();
+                    final createdAt =
+                        (data['created_at'] as Timestamp?)?.toDate() ??
+                            DateTime.now();
+                    final tanggalMulai =
+                        (data['tanggal_mulai'] as Timestamp).toDate();
+                    final tanggalSelesai =
+                        (data['tanggal_selesai'] as Timestamp).toDate();
 
                     return SakitRekapanData(
                       id: d.id,
-                      perihal: 'Sakit',
-                      tanggalMulai: tglMulai,
-                      tanggalSelesai: tglSelesai,
-                      status: data['status'] ?? "Diajukan",
-                      lampiranUrl: data['lampiranUrl'],
-                      lampiranName: data['fileName'] ?? 'Lampiran',
-                      keterangan: data['keterangan'] ?? '-',
-                      tanggalPengajuan: tglPengajuan,
+                      diagnosa: (data['diagnosa'] ?? 'Sakit').toString(),
+                      tanggalMulai: tanggalMulai,
+                      tanggalSelesai: tanggalSelesai,
+                      status: (data['status'] ?? 'Diajukan').toString(),
+                      lampiranUrl: data['lampiran_url']?.toString(),
+                      storagePath: data['storage_path']?.toString(),
+                      keterangan: (data['keterangan'] ?? '-').toString(),
+                      tanggalPengajuan: createdAt,
                       userName: userData['userName']!,
                       userEmail: userData['userEmail']!,
-                      userClass: userData['userClass']!,
+                      userRole: userData['userRole']!,
                     );
-                  }).toList();
+                  }).toList()
+                    ..sort((a, b) =>
+                        b.tanggalPengajuan.compareTo(a.tanggalPengajuan));
 
                   return ListView.builder(
                     padding: const EdgeInsets.symmetric(
                         horizontal: 16, vertical: 12),
                     itemCount: sakitList.length,
-                    itemBuilder: (context, index) {
-                      return Padding(
-                        padding: const EdgeInsets.only(bottom: 12.0),
-                        child:
-                            _buildSakitRekapanTile(sakitList[index], context),
-                      );
-                    },
+                    itemBuilder: (context, i) => Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: _buildTile(sakitList[i])),
                   );
                 },
               ),
@@ -213,46 +198,39 @@ class _RekapanSakitPageState extends State<RekapanSakitPage> {
       "November",
       "Desember"
     ];
-
-    String namaHari = hari[date.weekday % 7];
-    String namaBulan = bulan[date.month - 1];
-    return "$namaHari, ${date.day} $namaBulan ${date.year}";
+    return "${hari[date.weekday % 7]}, ${date.day} ${bulan[date.month - 1]} ${date.year}";
   }
 
-  void _showMessage(String msg) {
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
-    }
+  void _showMsg(String msg) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
   }
 
   Future<void> _hapusPengajuan(String sakitId) async {
     try {
       await _sakitService.hapusPengajuanSakit(sakitId);
-      _showMessage("Pengajuan sakit berhasil dihapus.");
+      _showMsg("Pengajuan sakit berhasil dihapus.");
     } catch (e) {
-      _showMessage("Gagal menghapus pengajuan: $e");
+      _showMsg("Gagal menghapus pengajuan: $e");
     }
   }
 
-  void _showConfirmDeleteDialog(String sakitId) {
+  void _confirmDelete(String sakitId) {
     showDialog(
       context: context,
-      builder: (dCtx) => AlertDialog(
+      builder: (c) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         title: const Text("Konfirmasi Hapus"),
-        content: const Text(
-            "Anda yakin ingin menghapus pengajuan sakit ini? Aksi ini tidak dapat dibatalkan."),
+        content: const Text("Yakin ingin menghapus pengajuan sakit ini?"),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(dCtx), child: const Text("Batal")),
+              onPressed: () => Navigator.pop(c), child: const Text("Batal")),
           ElevatedButton(
             onPressed: () {
-              Navigator.pop(dCtx);
+              Navigator.pop(c);
               _hapusPengajuan(sakitId);
             },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.red,
-            ),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
             child: const Text("Hapus", style: TextStyle(color: Colors.white)),
           ),
         ],
@@ -260,189 +238,124 @@ class _RekapanSakitPageState extends State<RekapanSakitPage> {
     );
   }
 
-  Future<void> openPdf(String url, BuildContext context) async {
+  Future<void> _openPdf(String url) async {
     if (kIsWeb) {
       html.window.open(url, '_blank');
+      return;
+    }
+    final uri = Uri.parse(url);
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
     } else {
-      final Uri uri = Uri.parse(url);
-      if (await canLaunchUrl(uri)) {
-        await launchUrl(uri, mode: LaunchMode.externalApplication);
-      } else {
-        _showMessage('Gagal membuka lampiran: URL tidak valid');
-      }
+      _showMsg('Gagal membuka lampiran.');
     }
   }
 
-  Widget _buildSakitRekapanTile(SakitRekapanData sakit, BuildContext context) {
-    String periodeSakit =
-        "${sakit.tanggalMulai.day}/${sakit.tanggalMulai.month}/${sakit.tanggalMulai.year} s.d. ${sakit.tanggalSelesai.day}/${sakit.tanggalSelesai.month}/${sakit.tanggalSelesai.year}";
-
-    final bool canDelete = sakit.status.toLowerCase() == 'diajukan';
-
-    Widget statusBadge(String status, Color color) {
-      return Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-        decoration: BoxDecoration(
-          color: color,
-          borderRadius: BorderRadius.circular(20),
-        ),
-        child: Text(
-          status,
-          style: const TextStyle(
-            color: Colors.white,
-            fontWeight: FontWeight.bold,
-            fontSize: 12,
-          ),
-        ),
-      );
-    }
+  Widget _buildTile(SakitRekapanData sakit) {
+    final periode =
+        "${sakit.tanggalMulai.day}/${sakit.tanggalMulai.month}/${sakit.tanggalMulai.year} "
+        "s.d. ${sakit.tanggalSelesai.day}/${sakit.tanggalSelesai.month}/${sakit.tanggalSelesai.year}";
+    final canDelete = sakit.status.toLowerCase() == 'diajukan';
 
     return Card(
       elevation: 4,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      margin: EdgeInsets.zero,
-      child: Theme(
-        data: Theme.of(context).copyWith(
-            splashColor: Colors.transparent,
-            highlightColor: Colors.transparent),
-        child: ExpansionTile(
-          tilePadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          title: Text(
-            sakit.perihal,
-            style: const TextStyle(
-              fontWeight: FontWeight.bold,
-              fontSize: 16,
-              color: Color(0xFF2B3541),
-            ),
+      child: ExpansionTile(
+        title: Text(sakit.diagnosa,
+            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+        subtitle: Row(children: [
+          const Icon(Icons.calendar_month, size: 16, color: Colors.grey),
+          const SizedBox(width: 6),
+          Expanded(
+              child: Text("Periode: $periode",
+                  style: const TextStyle(fontSize: 13, color: Colors.black87))),
+        ]),
+        trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+          if (sakit.lampiranUrl != null && sakit.lampiranUrl!.isNotEmpty)
+            const Icon(Icons.attachment, color: Colors.deepOrange, size: 20),
+          const SizedBox(width: 6),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            decoration: BoxDecoration(
+                color: _statusColor(sakit.status),
+                borderRadius: BorderRadius.circular(20)),
+            child: Text(sakit.status,
+                style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 12,
+                    color: Colors.white)),
           ),
-          subtitle: Padding(
-            padding: const EdgeInsets.only(top: 4.0),
-            child: Row(
-              children: [
-                const Icon(Icons.calendar_month, size: 16, color: Colors.grey),
-                const SizedBox(width: 6),
-                Expanded(
-                  child: Text(
-                    "Periode: $periodeSakit",
-                    style: const TextStyle(fontSize: 13, color: Colors.black87),
+          const SizedBox(width: 4),
+          const Icon(Icons.arrow_drop_down, color: Colors.grey),
+        ]),
+        children: [
+          const Divider(indent: 16, endIndent: 16, thickness: 1),
+          Padding(
+            padding: const EdgeInsets.all(16.0),
+            child:
+                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              _buildDetail("Nama", sakit.userName),
+              _buildDetail("Email", sakit.userEmail),
+              _buildDetail("Jabatan", sakit.userRole),
+              const SizedBox(height: 12),
+              _buildDetail(
+                  "Tanggal Pengajuan", _formatTanggal(sakit.tanggalPengajuan)),
+              _buildDetail("Status", sakit.status,
+                  isStatus: true, color: _statusColor(sakit.status)),
+              _buildDetail("Keterangan",
+                  sakit.keterangan.isEmpty ? "-" : sakit.keterangan),
+              if (sakit.lampiranUrl != null && sakit.lampiranUrl!.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(top: 15.0),
+                  child: ElevatedButton.icon(
+                    onPressed: () => _openPdf(sakit.lampiranUrl!),
+                    icon: const Icon(Icons.file_download, color: Colors.white),
+                    label: const Text("Lihat Lampiran",
+                        style: TextStyle(color: Colors.white)),
+                    style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF1666A9),
+                        minimumSize: const Size(double.infinity, 40)),
                   ),
                 ),
-              ],
-            ),
-          ),
-          trailing: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (sakit.lampiranUrl != null && sakit.lampiranUrl!.isNotEmpty)
-                const Padding(
-                  padding: EdgeInsets.only(right: 8.0),
-                  child: Icon(Icons.attachment,
-                      color: Colors.deepOrange, size: 20),
+              if (canDelete)
+                Padding(
+                  padding: const EdgeInsets.only(top: 10.0),
+                  child: OutlinedButton.icon(
+                    onPressed: () => _confirmDelete(sakit.id),
+                    icon: const Icon(Icons.delete_forever, color: Colors.red),
+                    label: const Text("Hapus Pengajuan",
+                        style: TextStyle(color: Colors.red)),
+                    style: OutlinedButton.styleFrom(
+                        side: const BorderSide(color: Colors.red),
+                        minimumSize: const Size(double.infinity, 40)),
+                  ),
                 ),
-              statusBadge(sakit.status, _statusColor(sakit.status)),
-              const SizedBox(width: 4),
-              const Icon(Icons.arrow_drop_down, color: Colors.grey),
-            ],
-          ),
-          children: [
-            const Divider(height: 1, thickness: 1, indent: 16, endIndent: 16),
-            Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _buildDetailRow("Nama", sakit.userName),
-                  _buildDetailRow("Email", sakit.userEmail),
-                  _buildDetailRow("Kelas/Jabatan", sakit.userClass),
-                  const SizedBox(height: 12),
-                  _buildDetailRow(
-                      "Tgl Pengajuan", _formatTanggal(sakit.tanggalPengajuan)),
-                  _buildDetailRow("Status", sakit.status,
-                      isStatus: true, statusColor: _statusColor(sakit.status)),
-                  _buildDetailRow("Keterangan",
-                      sakit.keterangan.isEmpty ? "-" : sakit.keterangan),
-                  if (sakit.lampiranUrl != null &&
-                      sakit.lampiranUrl!.isNotEmpty)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 15.0),
-                      child: ElevatedButton.icon(
-                        onPressed: () => openPdf(sakit.lampiranUrl!, context),
-                        icon: const Icon(Icons.file_download,
-                            size: 20, color: Colors.white),
-                        label: Text(
-                          "Lihat Surat Dokter (${sakit.lampiranName})",
-                          style: const TextStyle(
-                              color: Colors.white, fontWeight: FontWeight.w600),
-                        ),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF1666A9),
-                          minimumSize: const Size(double.infinity, 40),
-                          shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(8)),
-                        ),
-                      ),
-                    ),
-                  if (canDelete)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 10.0),
-                      child: OutlinedButton.icon(
-                        onPressed: () => _showConfirmDeleteDialog(sakit.id),
-                        icon: const Icon(Icons.delete_forever,
-                            color: Colors.red, size: 20),
-                        label: const Text("Hapus Pengajuan",
-                            style: TextStyle(
-                                color: Colors.red,
-                                fontWeight: FontWeight.w600)),
-                        style: OutlinedButton.styleFrom(
-                          side: const BorderSide(color: Colors.red),
-                          minimumSize: const Size(double.infinity, 40),
-                          shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(8)),
-                        ),
-                      ),
-                    ),
-                ],
-              ),
-            ),
-          ],
-        ),
+            ]),
+          )
+        ],
       ),
     );
   }
 
-  Widget _buildDetailRow(String label, String value,
-      {bool isStatus = false, Color statusColor = Colors.black}) {
+  Widget _buildDetail(String label, String value,
+      {bool isStatus = false, Color color = Colors.black}) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4.0),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        SizedBox(
             width: 130,
-            child: Text(
-              "$label:",
-              style: const TextStyle(
-                  fontWeight: FontWeight.w500, color: Colors.black54),
-            ),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
+            child: Text("$label:",
+                style: const TextStyle(
+                    fontWeight: FontWeight.w500, color: Colors.black54))),
+        const SizedBox(width: 8),
+        Expanded(
             child: isStatus
-                ? Text(
-                    value,
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      color: statusColor,
-                    ),
-                  )
-                : Text(
-                    value,
+                ? Text(value,
+                    style: TextStyle(fontWeight: FontWeight.bold, color: color))
+                : Text(value,
                     style: const TextStyle(
-                        fontWeight: FontWeight.w600, color: Colors.black87),
-                  ),
-          ),
-        ],
-      ),
+                        fontWeight: FontWeight.w600, color: Colors.black87))),
+      ]),
     );
   }
 }

@@ -1,10 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:languo/admin/rekapan/sakit_rekapan_admin_page.dart';
-import '../../../services/sakit_service.dart';
-import 'package:universal_html/html.dart' as html;
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:url_launcher/url_launcher.dart';
+import 'package:languo/admin/rekapan/sakit_rekapan_admin_page.dart';
+import 'package:languo/admin/pengajuan/sakit_pengajuan_role_page.dart';
 
 class VerifikasiSakitPage extends StatefulWidget {
   final String role;
@@ -16,24 +14,45 @@ class VerifikasiSakitPage extends StatefulWidget {
 }
 
 class _VerifikasiSakitPageState extends State<VerifikasiSakitPage> {
-  final _sakitService = SakitService();
   int selectedTab = 0;
-  TextEditingController searchController = TextEditingController();
   int expandedIndex = -1;
+
+  TextEditingController searchController = TextEditingController();
   String keyword = "";
 
-  // ============================================================
-  // POPUP TERIMA
-  // ============================================================
+  final Map<int, String> bulan = {
+    1: "Jan",
+    2: "Feb",
+    3: "Mar",
+    4: "Apr",
+    5: "Mei",
+    6: "Jun",
+    7: "Jul",
+    8: "Agu",
+    9: "Sep",
+    10: "Okt",
+    11: "Nov",
+    12: "Des",
+  };
+
+  // STREAM
+  Stream<QuerySnapshot> getPengajuanSakit() {
+    return FirebaseFirestore.instance
+        .collection("pengajuan_sakit")
+        .where("status", isEqualTo: "Diajukan")
+        .where("user_role", isEqualTo: widget.role)
+        .snapshots();
+  }
+
+  // ================= POPUP TERIMA =================
   void showSuccessPopup(BuildContext context) {
     showDialog(
       context: context,
       barrierDismissible: true,
       builder: (context) {
         return Dialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
-          ),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
           child: Padding(
             padding: const EdgeInsets.all(25),
             child: Column(
@@ -42,26 +61,21 @@ class _VerifikasiSakitPageState extends State<VerifikasiSakitPage> {
                 Container(
                   padding: const EdgeInsets.all(15),
                   decoration: const BoxDecoration(
-                    color: Colors.green,
-                    shape: BoxShape.circle,
-                  ),
+                      color: Colors.green, shape: BoxShape.circle),
                   child: const Icon(Icons.check, color: Colors.white, size: 45),
                 ),
                 const SizedBox(height: 20),
-                const Text(
-                  "Pengajuan telah disetujui",
-                  textAlign: TextAlign.center,
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                ),
+                const Text("Pengajuan telah disetujui",
+                    textAlign: TextAlign.center,
+                    style:
+                        TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                 const SizedBox(height: 20),
                 ElevatedButton(
                   onPressed: () => Navigator.pop(context),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.green,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                  ),
+                      backgroundColor: Colors.green,
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10))),
                   child: const Padding(
                     padding: EdgeInsets.symmetric(horizontal: 30, vertical: 10),
                     child: Text("OK", style: TextStyle(color: Colors.white)),
@@ -75,28 +89,26 @@ class _VerifikasiSakitPageState extends State<VerifikasiSakitPage> {
     );
   }
 
-  // ============================================================
-  // POPUP KONFIRMASI TOLAK
-  // ============================================================
-  void showRejectConfirm(BuildContext context, String sakitId) {
+  // ================= POPUP TOLAK =================
+  void showRejectConfirm(BuildContext context, String id) {
+    final currentCtx = context;
+
     showDialog(
       context: context,
       barrierDismissible: false,
       builder: (context) {
         return Dialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
-          ),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
           child: Padding(
             padding: const EdgeInsets.all(25),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Text(
-                  "Apakah Anda yakin ingin menolak?",
-                  textAlign: TextAlign.center,
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-                ),
+                const Text("Apakah Anda yakin ingin menolak?",
+                    textAlign: TextAlign.center,
+                    style:
+                        TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
                 const SizedBox(height: 30),
                 Row(
                   children: [
@@ -111,9 +123,7 @@ class _VerifikasiSakitPageState extends State<VerifikasiSakitPage> {
                           ),
                           alignment: Alignment.center,
                           child: const Text("Tidak",
-                              style: TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.white)),
+                              style: TextStyle(color: Colors.white)),
                         ),
                       ),
                     ),
@@ -122,28 +132,27 @@ class _VerifikasiSakitPageState extends State<VerifikasiSakitPage> {
                       child: InkWell(
                         onTap: () async {
                           Navigator.pop(context);
-                          try {
-                            await _sakitService.rejectPengajuanSakit(sakitId);
-                            if (mounted) showRejectSuccess(context);
-                          } catch (e) {
-                            if (mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(content: Text("Gagal menolak: $e")),
-                              );
-                            }
-                          }
+                          await FirebaseFirestore.instance
+                              .collection("pengajuan_sakit")
+                              .doc(id)
+                              .update({
+                            "status": "Ditolak",
+                            "tanggal_verifikasi": Timestamp.now(),
+                          });
+
+                          if (!mounted) return;
+                          showRejectSuccess(currentCtx);
+                          setState(() => expandedIndex = -1);
                         },
                         child: Container(
                           height: 45,
                           decoration: BoxDecoration(
-                            color: Color(0xFF36546C),
+                            color: const Color(0xFF36546C),
                             borderRadius: BorderRadius.circular(10),
                           ),
                           alignment: Alignment.center,
                           child: const Text("Ya",
-                              style: TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.white)),
+                              style: TextStyle(color: Colors.white)),
                         ),
                       ),
                     ),
@@ -157,18 +166,15 @@ class _VerifikasiSakitPageState extends State<VerifikasiSakitPage> {
     );
   }
 
-  // ============================================================
-  // POPUP TOLAK SUKSES
-  // ============================================================
+  // ================= POPUP BERHASIL TOLAK =================
   void showRejectSuccess(BuildContext context) {
     showDialog(
       context: context,
       barrierDismissible: false,
       builder: (context) {
         return Dialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
-          ),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
           child: Padding(
             padding: const EdgeInsets.all(25),
             child: Column(
@@ -177,26 +183,21 @@ class _VerifikasiSakitPageState extends State<VerifikasiSakitPage> {
                 Container(
                   padding: const EdgeInsets.all(15),
                   decoration: const BoxDecoration(
-                    color: Colors.red,
-                    shape: BoxShape.circle,
-                  ),
+                      color: Colors.red, shape: BoxShape.circle),
                   child: const Icon(Icons.close, color: Colors.white, size: 45),
                 ),
                 const SizedBox(height: 20),
-                const Text(
-                  "Pengajuan telah ditolak",
-                  textAlign: TextAlign.center,
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                ),
+                const Text("Pengajuan telah ditolak",
+                    textAlign: TextAlign.center,
+                    style:
+                        TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                 const SizedBox(height: 20),
                 ElevatedButton(
                   onPressed: () => Navigator.pop(context),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.red,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                  ),
+                      backgroundColor: Colors.red,
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10))),
                   child: const Padding(
                     padding: EdgeInsets.symmetric(horizontal: 30, vertical: 10),
                     child: Text("OK", style: TextStyle(color: Colors.white)),
@@ -210,30 +211,190 @@ class _VerifikasiSakitPageState extends State<VerifikasiSakitPage> {
     );
   }
 
-  Future<void> openPdf(String url, BuildContext context) async {
-    if (kIsWeb) {
-      html.window.open(url, '_blank');
-    } else {
-      final Uri uri = Uri.parse(url);
-      if (await canLaunchUrl(uri)) {
-        await launchUrl(uri, mode: LaunchMode.externalApplication);
-      } else {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Gagal membuka lampiran')),
-          );
-        }
-      }
+  // ================= TILE KARTU =================
+  Widget sakitTile(Map<String, dynamic> data, String id, int index) {
+    DateTime mulai = (data['tanggal_mulai'] as Timestamp).toDate();
+    DateTime selesai = (data['tanggal_selesai'] as Timestamp).toDate();
+
+    final isExpanded = expandedIndex == index;
+
+    // COLLAPSED
+    if (!isExpanded) {
+      return GestureDetector(
+        onTap: () => setState(() => expandedIndex = index),
+        child: Container(
+          margin: const EdgeInsets.symmetric(vertical: 8),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: Colors.grey.shade300),
+            boxShadow: [
+              BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 6)
+            ],
+          ),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(data["user_name"] ?? "-",
+                    style: const TextStyle(
+                        fontSize: 14, fontWeight: FontWeight.bold)),
+              ),
+              const SizedBox(width: 12),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                    color: const Color(0xFFFFA86F),
+                    borderRadius: BorderRadius.circular(20)),
+                child: const Text("Proses",
+                    style: TextStyle(
+                        color: Colors.white, fontWeight: FontWeight.bold)),
+              ),
+              const SizedBox(width: 8),
+              const Icon(Icons.chevron_right, color: Colors.orange)
+            ],
+          ),
+        ),
+      );
     }
+
+    // EXPANDED
+    return Container(
+      margin: const EdgeInsets.symmetric(vertical: 8),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.grey.shade300),
+        boxShadow: [
+          BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 6)
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // HEADER
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(data["user_name"] ?? "-",
+                  style: const TextStyle(
+                      fontSize: 16, fontWeight: FontWeight.bold)),
+              Row(
+                children: [
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    decoration: BoxDecoration(
+                        color: const Color(0xFFF29C1B),
+                        borderRadius: BorderRadius.circular(20)),
+                    child: const Text("Proses",
+                        style: TextStyle(color: Colors.white)),
+                  ),
+                  IconButton(
+                    onPressed: () => setState(() => expandedIndex = -1),
+                    icon: const Icon(Icons.close),
+                  ),
+                ],
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+
+          const Text("Tanggal Sakit :",
+              style: TextStyle(fontWeight: FontWeight.bold)),
+          Text(
+              "${mulai.day} ${bulan[mulai.month]} ${mulai.year} s.d ${selesai.day} ${bulan[selesai.month]} ${selesai.year}"),
+          const SizedBox(height: 8),
+          const Text("Diagnosa :",
+              style: TextStyle(fontWeight: FontWeight.bold)),
+          Text(data["keterangan"] ?? "-"),
+          const SizedBox(height: 8),
+          const Text("Keterangan :",
+              style: TextStyle(fontWeight: FontWeight.bold)),
+          Text(data['keterangan'] ?? "-"),
+          const SizedBox(height: 8),
+          const Text("Alamat Email :",
+              style: TextStyle(fontWeight: FontWeight.bold)),
+          Text(data["user_email"] ?? "-",
+              style: TextStyle(color: Colors.black87)),
+
+          const SizedBox(height: 14),
+
+          // FILE
+          SizedBox(
+            width: double.infinity,
+            height: 50,
+            child: ElevatedButton.icon(
+              onPressed: () async {
+                final url = data["lampiranUrl"];
+                if (url == null || url.isEmpty) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text("File tidak tersedia")));
+                  return;
+                }
+                final uri = Uri.parse(url);
+                if (!await launchUrl(uri,
+                    mode: LaunchMode.externalApplication)) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text("Gagal membuka file")));
+                }
+              },
+              icon: const Icon(Icons.insert_drive_file, color: Colors.white),
+              label: const Text("File",
+                  style: TextStyle(
+                      color: Colors.white, fontWeight: FontWeight.bold)),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFFE4572E),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12)),
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+
+          // BUTTONS
+          Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              ElevatedButton(
+                onPressed: () => showRejectConfirm(context, id),
+                style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.red,
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10))),
+                child:
+                    const Text("TOLAK", style: TextStyle(color: Colors.white)),
+              ),
+              const SizedBox(width: 12),
+              ElevatedButton(
+                onPressed: () async {
+                  await FirebaseFirestore.instance
+                      .collection("pengajuan_sakit")
+                      .doc(id)
+                      .update({
+                    "status": "Disetujui",
+                    "tanggal_verifikasi": Timestamp.now(),
+                  });
+                  showSuccessPopup(context);
+                  setState(() => expandedIndex = -1);
+                },
+                style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF36546C),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10))),
+                child:
+                    const Text("TERIMA", style: TextStyle(color: Colors.white)),
+              ),
+            ],
+          )
+        ],
+      ),
+    );
   }
 
-  String _formatTanggal(DateTime date) {
-    return "${date.day}/${date.month}/${date.year}";
-  }
-
-  // ============================================================
-  // UI
-  // ============================================================
+  // ================= UI =================
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -243,13 +404,61 @@ class _VerifikasiSakitPageState extends State<VerifikasiSakitPage> {
           header(),
           _buildTabBar(),
           searchBar(),
-          Expanded(child: SakitList()),
+          Expanded(
+            child: StreamBuilder<QuerySnapshot>(
+              stream: selectedTab == 0
+                  ? getPengajuanSakit()
+                  : FirebaseFirestore.instance
+                      .collection("pengajuan_sakit")
+                      .where("status", isNotEqualTo: "Diajukan")
+                      .orderBy("created_at", descending: true)
+                      .snapshots(),
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+
+                if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                  return const Center(child: Text("Tidak ada pengajuan sakit"));
+                }
+
+                final docs = snapshot.data!.docs;
+
+                final filtered = docs.where((doc) {
+                  if (keyword.isEmpty) return true;
+                  final d = doc.data() as Map<String, dynamic>;
+                  final name = (d['user_name'] ?? '').toString().toLowerCase();
+                  final email =
+                      (d['user_email'] ?? '').toString().toLowerCase();
+                  final diagnosa =
+                      (d['diagnosa'] ?? '').toString().toLowerCase();
+                  return name.contains(keyword) ||
+                      email.contains(keyword) ||
+                      diagnosa.contains(keyword);
+                }).toList();
+
+                if (filtered.isEmpty) {
+                  return const Center(child: Text("Tidak ditemukan"));
+                }
+
+                return ListView.builder(
+                  padding: const EdgeInsets.all(16),
+                  itemCount: filtered.length,
+                  itemBuilder: (context, index) {
+                    final doc = filtered[index];
+                    return sakitTile(
+                        doc.data() as Map<String, dynamic>, doc.id, index);
+                  },
+                );
+              },
+            ),
+          ),
         ],
       ),
     );
   }
 
-  // HEADER
+  // ================= HEADER =================
   Widget header() {
     return Container(
       height: 160,
@@ -266,19 +475,37 @@ class _VerifikasiSakitPageState extends State<VerifikasiSakitPage> {
         child: Align(
           alignment: Alignment.centerLeft,
           child: Row(
+            mainAxisSize: MainAxisSize.min,
             children: [
               InkWell(
-                onTap: () => Navigator.pop(context),
+                onTap: () {
+                  Navigator.pushReplacement(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const AdminSakitPage(),
+                    ),
+                  );
+                },
                 child:
                     const Icon(Icons.arrow_back, color: Colors.white, size: 26),
               ),
               const SizedBox(width: 10),
-              Text(
-                "Sakit  <  ${widget.role}",
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
+              InkWell(
+                onTap: () {
+                  Navigator.pushReplacement(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const AdminSakitPage(),
+                    ),
+                  );
+                },
+                child: Text(
+                  "Sakit  <  ${widget.role}",
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
               ),
             ],
@@ -288,7 +515,7 @@ class _VerifikasiSakitPageState extends State<VerifikasiSakitPage> {
     );
   }
 
-  // TAB BAR + LOGIKA PINDAH HALAMAN
+  // ================= TAB BAR =================
   Widget _buildTabBar() {
     return Transform.translate(
       offset: const Offset(0, -30),
@@ -299,36 +526,32 @@ class _VerifikasiSakitPageState extends State<VerifikasiSakitPage> {
           color: Colors.grey.shade200,
           borderRadius: BorderRadius.circular(40),
         ),
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            final tabWidth = constraints.maxWidth / 2;
-
-            return Stack(
-              children: [
-                AnimatedPositioned(
-                  duration: const Duration(milliseconds: 250),
-                  left: selectedTab == 0 ? 0 : tabWidth,
-                  child: Container(
-                    height: 55,
-                    width: tabWidth,
-                    decoration: BoxDecoration(
-                      gradient: const LinearGradient(
-                        colors: [Colors.deepOrange, Colors.redAccent],
-                      ),
-                      borderRadius: BorderRadius.circular(40),
-                    ),
+        child: LayoutBuilder(builder: (context, constraints) {
+          final tabWidth = constraints.maxWidth / 2;
+          return Stack(
+            children: [
+              AnimatedPositioned(
+                duration: const Duration(milliseconds: 250),
+                left: selectedTab == 0 ? 0 : tabWidth,
+                child: Container(
+                  height: 55,
+                  width: tabWidth,
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                        colors: [Colors.deepOrange, Colors.redAccent]),
+                    borderRadius: BorderRadius.circular(40),
                   ),
                 ),
-                Row(
-                  children: [
-                    _tabButton("Pengajuan", 0),
-                    _tabButton("Rekapan", 1),
-                  ],
-                )
-              ],
-            );
-          },
-        ),
+              ),
+              Row(
+                children: [
+                  _tabButton("Pengajuan", 0),
+                  _tabButton("Rekapan", 1),
+                ],
+              )
+            ],
+          );
+        }),
       ),
     );
   }
@@ -339,22 +562,13 @@ class _VerifikasiSakitPageState extends State<VerifikasiSakitPage> {
         onTap: () {
           if (index == 1) {
             String role = widget.role;
-
-            // ⬇ jika role tidak ditemukan, default ke karyawan
-            if (role != "Karyawan" && role != "Dosen"){
-              role = "Karyawan";
-            }
-
             Navigator.push(
               context,
               MaterialPageRoute(
-                builder: (_) => RekapanAdminSakitPage(role: role),
-              ),
+                  builder: (_) => RekapanAdminSakitPage(role: role)),
             );
             return;
           }
-
-          // Untuk tab pengajuan
           setState(() => selectedTab = index);
         },
         child: Center(
@@ -371,7 +585,7 @@ class _VerifikasiSakitPageState extends State<VerifikasiSakitPage> {
     );
   }
 
-  // SEARCH BAR
+  // ================= SEARCH =================
   Widget searchBar() {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -400,248 +614,6 @@ class _VerifikasiSakitPageState extends State<VerifikasiSakitPage> {
             const Icon(Icons.search, color: Colors.white),
           ],
         ),
-      ),
-    );
-  }
-
-  // LIST IZIN SAKIT DENGAN FILTER ROLE
-  Widget SakitList() {
-    return StreamBuilder<QuerySnapshot>(
-      stream: _sakitService.getAllPengajuanSakitAdmin(),
-      builder: (context, snapshot) {
-        if (snapshot.hasError) {
-          return Center(child: Text('Error: ${snapshot.error}'));
-        }
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator());
-        }
-
-        final docs = snapshot.data?.docs ?? [];
-
-        // ========== FILTER BERDASARKAN STATUS DAN ROLE ==========
-        final diajukanDocs = docs.where((doc) {
-          final data = doc.data() as Map<String, dynamic>;
-          final status = data['status'] ?? '';
-          final userRole = data['userRole'] ?? '';
-          
-          // Filter: status = "Diajukan" DAN userRole sesuai widget.role (Karyawan atau Dosen)
-          return status == 'Diajukan' && userRole == widget.role;
-        }).toList();
-
-        if (diajukanDocs.isEmpty) {
-          return Center(
-            child: Text(
-              "Tidak ada pengajuan sakit untuk ${widget.role}",
-              style: const TextStyle(fontSize: 18, color: Colors.grey),
-            ),
-          );
-        }
-
-        // Filter berdasarkan keyword pencarian
-        var filtered = diajukanDocs.where((doc) {
-          final data = doc.data() as Map<String, dynamic>;
-          final nama = (data['userName'] ?? '').toString().toLowerCase();
-          return nama.contains(keyword);
-        }).toList();
-
-        if (filtered.isEmpty && keyword.isNotEmpty) {
-          return const Center(
-            child: Text(
-              "Pengguna tidak ditemukan",
-              style: TextStyle(fontSize: 16, color: Colors.grey),
-            ),
-          );
-        }
-
-        return ListView.builder(
-          padding: const EdgeInsets.only(top: 10),
-          itemCount: filtered.length,
-          itemBuilder: (context, index) {
-            final doc = filtered[index];
-            final data = doc.data() as Map<String, dynamic>;
-            return SakitCard(doc.id, data, index);
-          },
-        );
-      },
-    );
-  }
-
-  Widget SakitCard(String sakitId, Map<String, dynamic> data, int index) {
-    bool isExpanded = expandedIndex == index;
-
-    final nama = data['userName'] ?? '-';
-    final email = data['userEmail'] ?? '-';
-    final keterangan = data['keterangan'] ?? '-';
-    final lampiranUrl = data['lampiranUrl'] as String?;
-    final fileName = data['fileName'] ?? 'surat_sakit.pdf';
-
-    final tanggalMulai = (data['tanggalMulai'] as Timestamp?)?.toDate();
-    final tanggalSelesai = (data['tanggalSelesai'] as Timestamp?)?.toDate();
-
-    String periode = "-";
-    if (tanggalMulai != null && tanggalSelesai != null) {
-      periode =
-          "${_formatTanggal(tanggalMulai)} s.d ${_formatTanggal(tanggalSelesai)}";
-    }
-
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 300),
-      margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: const Color.fromARGB(207, 237, 236, 236),
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              const Icon(Icons.calendar_month, color: Color(0xFFDA3B26)),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(nama,
-                        style: const TextStyle(
-                            fontSize: 14, fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 6),
-                    const Text("Periode Izin :",
-                        style: TextStyle(color: Colors.black54)),
-                    Text(
-                      periode,
-                      style: const TextStyle(
-                          fontSize: 10,
-                          color: Color(0xFFDA3B26),
-                          fontWeight: FontWeight.bold),
-                    ),
-                  ],
-                ),
-              ),
-              Column(
-                children: [
-                  Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFFFA954),
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: const Text("Proses",
-                        style: TextStyle(color: Colors.white)),
-                  ),
-                  const SizedBox(height: 12),
-                  GestureDetector(
-                    onTap: () {
-                      setState(() {
-                        expandedIndex = isExpanded ? -1 : index;
-                      });
-                    },
-                    child: Container(
-                      width: 36,
-                      height: 36,
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFDA3B26),
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: Icon(
-                        isExpanded
-                            ? Icons.keyboard_arrow_up
-                            : Icons.arrow_forward,
-                        color: Colors.white,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-          if (isExpanded) ...[
-            const SizedBox(height: 15),
-            detailRow("Alamat Email :", email),
-            detailRow("Tanggal :", periode),
-            detailRow("Keterangan :", keterangan),
-            const SizedBox(height: 15),
-            if (lampiranUrl != null && lampiranUrl.isNotEmpty)
-              GestureDetector(
-                onTap: () => openPdf(lampiranUrl, context),
-                child: Container(
-                  height: 45,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFDA3B26),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const Icon(Icons.picture_as_pdf, color: Colors.white),
-                      const SizedBox(width: 8),
-                      Text("File ($fileName)",
-                          style: const TextStyle(color: Colors.white)),
-                    ],
-                  ),
-                ),
-              ),
-            const SizedBox(height: 15),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                GestureDetector(
-                  onTap: () => showRejectConfirm(context, sakitId),
-                  child: buildActionButton("TOLAK", Colors.red),
-                ),
-                const SizedBox(width: 8),
-                GestureDetector(
-                  onTap: () async {
-                    try {
-                      await _sakitService.approvePengajuanSakit(sakitId);
-                      if (mounted) showSuccessPopup(context);
-                    } catch (e) {
-                      if (mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text("Gagal menyetujui: $e")),
-                        );
-                      }
-                    }
-                  },
-                  child: buildActionButton("TERIMA", const Color(0xFF36546C)),
-                ),
-              ],
-            )
-          ]
-        ],
-      ),
-    );
-  }
-
-  Widget detailRow(String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 6),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(label,
-              style:
-                  const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-          Text(value,
-              style: const TextStyle(fontSize: 13, color: Colors.black54)),
-        ],
-      ),
-    );
-  }
-
-  Widget buildActionButton(String text, Color color) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
-      decoration: BoxDecoration(
-        color: color,
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Text(
-        text,
-        style:
-            const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
       ),
     );
   }

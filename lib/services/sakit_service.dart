@@ -7,7 +7,6 @@ class SakitService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseStorage _storage = FirebaseStorage.instance;
 
-  /// Upload lampiran sakit ke Firebase Storage
   Future<Map<String, String>> uploadLampiran({
     required Uint8List bytes,
     required String fileName,
@@ -36,28 +35,29 @@ class SakitService {
     final url = await ref.getDownloadURL();
 
     return {
-      'lampiranUrl': url,
-      'storagePath': storagePath,
-      'fileName': fileName,
+      'lampiran_url': url,
+      'storage_path': storagePath,
     };
   }
 
   /// Kirim pengajuan sakit ke Firestore (Lampiran WAJIB)
   Future<void> kirimPengajuan({
     required String userId,
-    required DateTime startDate,
-    required DateTime endDate,
-    required String keterangan,
-    Uint8List? lampiranBytes,
-    String? fileName,
+    required String diagnosa,
+    required DateTime tanggalMulai,
+    required DateTime tanggalSelesai,
+    required Uint8List lampiranBytes,
+    required String fileName,
+    String? keterangan,
+    DateTime? tanggalVerifikasi,
   }) async {
     try {
-      // === VALIDASI LAMPIRAN WAJIB ===
-      if (lampiranBytes == null || fileName == null) {
-        throw Exception("Lampiran surat sakit wajib diunggah.");
-      }
+      // Ambil data user
+      final userDoc = await FirebaseFirestore.instance
+          .collection("users")
+          .doc(userId)
+          .get();
 
-      final userDoc = await _firestore.collection("users").doc(userId).get();
       final userName = userDoc.data()?["user_name"] ?? "-";
       final userRole = userDoc.data()?["user_role"] ?? "-";
       final userEmail = userDoc.data()?["user_email"] ?? "-";
@@ -69,18 +69,19 @@ class SakitService {
       );
 
       await _firestore.collection("pengajuan_sakit").add({
-        "userId": userId,
-        "userName": userName,
-        "userRole": userRole,
-        "userEmail": userEmail,
-        "tanggalMulai": Timestamp.fromDate(startDate),
-        "tanggalSelesai": Timestamp.fromDate(endDate),
+        "user_id": userId,
+        "diagnosa": diagnosa,
+        "user_name": userName,
+        "user_role": userRole,
+        "user_email": userEmail,
+        "tanggal_mulai": Timestamp.fromDate(tanggalMulai),
+        "tanggal_selesai": Timestamp.fromDate(tanggalSelesai),
         "keterangan": keterangan,
-        "lampiranUrl": uploadResult['lampiranUrl'],
-        "storagePath": uploadResult['storagePath'],
-        "fileName": uploadResult['fileName'],
+        "lampiran_url": uploadResult['lampiran_url'],
+        "storage_path": uploadResult['storage_path'],
         "status": "Diajukan",
-        "createdAt": FieldValue.serverTimestamp(),
+        "created_at": FieldValue.serverTimestamp(),
+        "tanggal_verifikasi": tanggalVerifikasi,
       });
     } catch (e) {
       debugPrint("Error kirimPengajuan Sakit: $e");
@@ -92,85 +93,27 @@ class SakitService {
   Stream<QuerySnapshot> getRekapanSakit(String uid) {
     return _firestore
         .collection("pengajuan_sakit")
-        .where("userId", isEqualTo: uid)
-        .orderBy("createdAt", descending: true)
+        .where("user_id", isEqualTo: uid)
+        .orderBy("created_at", descending: true)
         .snapshots();
-  }
-
-  /// ADMIN: Ambil semua pengajuan sakit dengan status "Diajukan"
-  Stream<QuerySnapshot> getAllPengajuanSakitAdmin() {
-    return _firestore
-        .collection("pengajuan_sakit")
-        .orderBy("createdAt", descending: true)
-        .snapshots();
-  }
-
-  /// ADMIN: Ambil semua rekapan sakit (Disetujui & Ditolak)
-  Stream<QuerySnapshot> getAllRekapanSakitAdmin() {
-    return _firestore
-        .collection("pengajuan_sakit")
-        .orderBy("createdAt", descending: true)
-        .snapshots();
-  }
-
-  /// ADMIN: Setujui pengajuan sakit
-  Future<void> approvePengajuanSakit(String sakitId) async {
-    try {
-      await _firestore.collection("pengajuan_sakit").doc(sakitId).update({
-        "status": "Disetujui",
-        "approvedAt": FieldValue.serverTimestamp(),
-      });
-      debugPrint("Pengajuan sakit $sakitId disetujui");
-    } catch (e) {
-      debugPrint("Error approvePengajuanSakit: $e");
-      rethrow;
-    }
-  }
-
-  /// ADMIN: Tolak pengajuan sakit
-  Future<void> rejectPengajuanSakit(String sakitId) async {
-    try {
-      await _firestore.collection("pengajuan_sakit").doc(sakitId).update({
-        "status": "Ditolak",
-        "rejectedAt": FieldValue.serverTimestamp(),
-      });
-      debugPrint("Pengajuan sakit $sakitId ditolak");
-    } catch (e) {
-      debugPrint("Error rejectPengajuanSakit: $e");
-      rethrow;
-    }
   }
 
   /// Hapus pengajuan sakit + lampiran
   Future<void> hapusPengajuanSakit(String sakitId) async {
     try {
-      final docRef = _firestore.collection("pengajuan_sakit").doc(sakitId);
-      final doc = await docRef.get();
+      final sakitDocRef = _firestore.collection("pengajuan_sakit").doc(sakitId);
+      final sakitDoc = await sakitDocRef.get();
 
-      if (!doc.exists) {
-        throw Exception("Pengajuan sakit tidak ditemukan.");
-      }
+      if (!sakitDoc.exists) throw Exception("Dokumen izin tidak ditemukan.");
 
-      final data = doc.data();
-      final storagePath = data?['storagePath'] as String?;
-
-      // Hapus file di storage jika ada
+      final storagePath = sakitDoc.data()?["storage_path"];
       if (storagePath != null && storagePath.isNotEmpty) {
-        try {
-          final ref = _storage.ref().child(storagePath);
-          await ref.delete();
-          debugPrint("✅ Lampiran berhasil dihapus: $storagePath");
-        } catch (e) {
-          debugPrint("⚠️ Warning: Gagal menghapus lampiran: $e");
-          // Lanjutkan tetap hapus dokumen meskipun gagal hapus file
-        }
+        await _storage.ref().child(storagePath).delete();
       }
 
-      // Hapus dokumen dari Firestore
-      await docRef.delete();
-      debugPrint("✅ Dokumen sakit $sakitId berhasil dihapus");
+      await sakitDocRef.delete();
     } catch (e) {
-      debugPrint("❌ Error hapusPengajuan Sakit: $e");
+      debugPrint("Error hapus pengajuan izin: $e");
       rethrow;
     }
   }

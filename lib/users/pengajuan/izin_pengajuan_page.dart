@@ -2,7 +2,6 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../../services/izin_service.dart';
 import '../rekapan/izin_rekapan_user_page.dart';
 
@@ -18,8 +17,8 @@ class _PengajuanIzinPageState extends State<PengajuanIzinPage> {
   final _auth = FirebaseAuth.instance;
 
   int selectedTab = 0;
-  DateTime? startDate;
-  DateTime? endDate;
+  DateTime? tanggalMulai;
+  DateTime? tanggalSelesai;
 
   Uint8List? lampiranBytes;
   String? lampiranName;
@@ -34,21 +33,21 @@ class _PengajuanIzinPageState extends State<PengajuanIzinPage> {
   Future<void> pickStartDate() async {
     final picked = await showDatePicker(
       context: context,
-      initialDate: startDate ?? DateTime.now(),
+      initialDate: tanggalMulai ?? DateTime.now(),
       firstDate: DateTime(2000),
       lastDate: DateTime(2100),
     );
-    if (picked != null) setState(() => startDate = picked);
+    if (picked != null) setState(() => tanggalMulai = picked);
   }
 
   Future<void> pickEndDate() async {
     final picked = await showDatePicker(
       context: context,
-      initialDate: endDate ?? (startDate ?? DateTime.now()),
+      initialDate: tanggalSelesai ?? (tanggalMulai ?? DateTime.now()),
       firstDate: DateTime(2000),
       lastDate: DateTime(2100),
     );
-    if (picked != null) setState(() => endDate = picked);
+    if (picked != null) setState(() => tanggalSelesai = picked);
   }
 
   // ======================== LAMPIRAN ========================
@@ -79,7 +78,7 @@ class _PengajuanIzinPageState extends State<PengajuanIzinPage> {
       _showMessage("Perihal izin belum diisi");
       return false;
     }
-    if (startDate == null || endDate == null) {
+    if (tanggalMulai == null || tanggalSelesai == null) {
       _showMessage("Tanggal belum dipilih");
       return false;
     }
@@ -224,8 +223,8 @@ class _PengajuanIzinPageState extends State<PengajuanIzinPage> {
       await _izinService.kirimPengajuan(
         userId: userId,
         perihal: perihalController.text,
-        startDate: startDate!,
-        endDate: endDate!,
+        tanggalMulai: tanggalMulai!,
+        tanggalSelesai: tanggalSelesai!,
         keterangan: keteranganController.text,
         lampiranBytes: lampiranBytes!,
         fileName: lampiranName!,
@@ -235,8 +234,8 @@ class _PengajuanIzinPageState extends State<PengajuanIzinPage> {
         isSubmitted = true;
         perihalController.clear();
         keteranganController.clear();
-        startDate = null;
-        endDate = null;
+        tanggalMulai = null;
+        tanggalSelesai = null;
         lampiranBytes = null;
         lampiranName = null;
       });
@@ -394,18 +393,18 @@ class _PengajuanIzinPageState extends State<PengajuanIzinPage> {
             Expanded(
               child: GestureDetector(
                 onTap: pickStartDate,
-                child: _dateBox(startDate == null
+                child: _dateBox(tanggalMulai == null
                     ? "Pilih Tanggal"
-                    : "${startDate!.day} ${_monthName(startDate!.month)} ${startDate!.year}"),
+                    : "${tanggalMulai!.day} ${_monthName(tanggalMulai!.month)} ${tanggalMulai!.year}"),
               ),
             ),
             const SizedBox(width: 10),
             Expanded(
               child: GestureDetector(
                 onTap: pickEndDate,
-                child: _dateBox(endDate == null
+                child: _dateBox(tanggalSelesai == null
                     ? "Pilih Tanggal"
-                    : "${endDate!.day} ${_monthName(endDate!.month)} ${endDate!.year}"),
+                    : "${tanggalSelesai!.day} ${_monthName(tanggalSelesai!.month)} ${tanggalSelesai!.year}"),
               ),
             ),
           ],
@@ -458,7 +457,7 @@ class _PengajuanIzinPageState extends State<PengajuanIzinPage> {
             ),
           ),
         const SizedBox(height: 20),
-        const Text("Keterangan",
+        const Text("Keterangan (Opsional)",
             style: TextStyle(
                 color: Color(0xFF7F7F7F), fontWeight: FontWeight.w600)),
         const SizedBox(height: 8),

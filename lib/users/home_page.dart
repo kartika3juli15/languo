@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'dart:ui' as ui;
+import 'dart:math' as math;
 import '../models/user_model.dart';
 import '../profile/profile_page.dart';
 import '../screen/qr_scanner_screen.dart';
@@ -9,9 +11,6 @@ import 'package:languo/users/rekapan/kehadiran_rekapan_user_page.dart';
 import 'package:languo/users/pengajuan/cuti_pengajuan_page.dart';
 import 'package:languo/users/pengajuan/izin_pengajuan_page.dart';
 import 'package:languo/users/pengajuan/sakit_pengajuan_page.dart';
-import 'package:languo/users/rekapan/izin_rekapan_user_page.dart';
-import 'package:languo/users/rekapan/sakit_rekapan_user_page.dart';
-import 'package:languo/users/rekapan/cuti_rekapan_user_page.dart';
 import '../admin/home_page.dart';
 import 'package:intl/intl.dart';
 import 'package:intl/date_symbol_data_local.dart';
@@ -26,6 +25,14 @@ class HomePageUser extends StatefulWidget {
 class _HomePageUserState extends State<HomePageUser> {
   String? _lastScannedData;
   bool _localeReady = false;
+  
+  // Data untuk statistik
+  int _totalHadir = 0;
+  int _totalProses = 0;
+  int _totalCuti = 0;
+  int _totalIzin = 0;
+  int _totalSakit = 0;
+  bool _isLoadingStats = true;
 
   @override
   void initState() {
@@ -37,8 +44,8 @@ class _HomePageUserState extends State<HomePageUser> {
       }
     });
 
-    // Cek jika Admin → redirect ke HomeAdmin
     _redirectIfAdmin();
+    _loadStatistics();
   }
 
   Future<void> _redirectIfAdmin() async {
@@ -61,6 +68,89 @@ class _HomePageUserState extends State<HomePageUser> {
         context,
         MaterialPageRoute(builder: (_) => const HomeAdmin()),
       );
+    }
+  }
+
+  Future<void> _loadStatistics() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      if (mounted) {
+        setState(() => _isLoadingStats = false);
+      }
+      return;
+    }
+
+    try {
+      // Get Kehadiran - ambil semua data absensi
+      final hadirSnapshot = await FirebaseFirestore.instance
+          .collection('absensi')
+          .where('user_id', isEqualTo: user.uid)
+          .get();
+
+      // Hitung kehadiran yang sudah selesai (check_in dan check_out ada)
+      // dan yang masih proses (check_in ada tapi check_out kosong)
+      int hadirCount = 0;
+      int prosesCount = 0;
+      
+      for (var doc in hadirSnapshot.docs) {
+        final data = doc.data();
+        final checkIn = data['check_in'] ?? '';
+        final checkOut = data['check_out'] ?? '';
+        
+        if (checkIn.isNotEmpty && checkOut.isNotEmpty) {
+          // Sudah check out (kehadiran selesai)
+          hadirCount++;
+        } else if (checkIn.isNotEmpty && checkOut.isEmpty) {
+          // Sudah check in tapi belum check out (proses)
+          prosesCount++;
+        }
+      }
+
+      // Get Cuti yang disetujui
+      final cutiSnapshot = await FirebaseFirestore.instance
+          .collection('pengajuan_cuti')
+          .where('user_id', isEqualTo: user.uid)
+          .where('status', isEqualTo: 'Disetujui')
+          .get();
+
+      // Get Izin yang disetujui
+      final izinSnapshot = await FirebaseFirestore.instance
+          .collection('pengajuan_izin')
+          .where('user_id', isEqualTo: user.uid)
+          .where('status', isEqualTo: 'Disetujui')
+          .get();
+
+      // Get Sakit yang disetujui
+      final sakitSnapshot = await FirebaseFirestore.instance
+          .collection('pengajuan_sakit')
+          .where('user_id', isEqualTo: user.uid)
+          .where('status', isEqualTo: 'Disetujui')
+          .get();
+
+      if (mounted) {
+        setState(() {
+          _totalHadir = hadirCount;
+          _totalProses = prosesCount;
+          _totalCuti = cutiSnapshot.docs.length;
+          _totalIzin = izinSnapshot.docs.length;
+          _totalSakit = sakitSnapshot.docs.length;
+          _isLoadingStats = false;
+        });
+
+        // Debug print
+        print('=== STATISTIK KEHADIRAN ===');
+        print('Total Hadir (Selesai): $hadirCount');
+        print('Total Proses (Belum Check Out): $prosesCount');
+        print('Total Cuti: ${cutiSnapshot.docs.length}');
+        print('Total Izin: ${izinSnapshot.docs.length}');
+        print('Total Sakit: ${sakitSnapshot.docs.length}');
+        print('========================');
+      }
+    } catch (e) {
+      print('Error loading statistics: $e');
+      if (mounted) {
+        setState(() => _isLoadingStats = false);
+      }
     }
   }
 
@@ -95,25 +185,10 @@ class _HomePageUserState extends State<HomePageUser> {
                 padding: const EdgeInsets.only(bottom: 20),
                 child: _buildMenuButtons(),
               ),
-              const SizedBox(height: 40),
+              const SizedBox(height: 30),
               _buildAktivitasChart(),
-              const SizedBox(height: 20),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: Text(
-                  "Detail",
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                ),
-              ),
-              const SizedBox(height: 10),
-              _buildDetailBar(
-                  title: "Tepat Waktu", value: 0.655, color: Color(0xFF2196F3)),
-              _buildDetailBar(
-                  title: "Terlambat", value: 0.165, color: Color(0xFFFFA500)),
-              _buildDetailBar(
-                  title: "Izin", value: 0.062, color: Color(0xFFFFD700)),
-              _buildDetailBar(
-                  title: "Sakit", value: 0.125, color: Color(0xFF4CAF50)),
+              const SizedBox(height: 30),
+              _buildDetailSection(),
               const SizedBox(height: 20),
             ],
           ),
@@ -322,7 +397,7 @@ class _HomePageUserState extends State<HomePageUser> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      "HALLO!",
+                      "HALO!",
                       style: TextStyle(
                         color: Colors.white,
                         fontSize: 12,
@@ -385,58 +460,71 @@ class _HomePageUserState extends State<HomePageUser> {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceEvenly,
       children: [
-        _menuButton(Icons.person, "Hadir", () {
-          Navigator.push(
+        _menuButton(Icons.accessibility_new, "Hadir", Color(0xFF5B7C99), () async {
+          await Navigator.push(
             context,
             MaterialPageRoute(builder: (_) => const KehadiranPage()),
           );
+          // Refresh data setelah kembali dari halaman Hadir
+          _loadStatistics();
         }),
-        _menuButton(Icons.description, "Izin", () {
-          Navigator.push(
+        _menuButton(Icons.list_alt, "Izin", Color(0xFF5B7C99), () async {
+          await Navigator.push(
             context,
             MaterialPageRoute(builder: (_) => const PengajuanIzinPage()),
           );
+          // Refresh data setelah kembali dari halaman Izin
+          _loadStatistics();
         }),
-        _menuButton(Icons.medical_services, "Sakit", () {
-          Navigator.push(
+        _menuButton(Icons.medical_services, "Sakit", Color(0xFF5B7C99), () async {
+          await Navigator.push(
             context,
             MaterialPageRoute(builder: (_) => const PengajuanSakitPage()),
           );
+          // Refresh data setelah kembali dari halaman Sakit
+          _loadStatistics();
         }),
-        _menuButton(Icons.schedule, "Cuti", () {
-          Navigator.push(
+        _menuButton(Icons.watch_later, "Cuti", Color(0xFF5B7C99), () async {
+          await Navigator.push(
             context,
             MaterialPageRoute(builder: (_) => const PengajuanCutiPage()),
           );
+          // Refresh data setelah kembali dari halaman Cuti
+          _loadStatistics();
         }),
       ],
     );
   }
 
-  Widget _menuButton(IconData icon, String title, VoidCallback onTap) {
+  Widget _menuButton(IconData icon, String title, Color color, VoidCallback onTap) {
     return GestureDetector(
       onTap: onTap,
       child: Column(
         children: [
           Container(
-            padding: const EdgeInsets.all(14),
+            width: 65,
+            height: 65,
             decoration: BoxDecoration(
-              color: Color(0xFF36546C),
+              color: color,
               shape: BoxShape.circle,
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black12,
-                  blurRadius: 6,
-                  offset: Offset(0, 2),
+                  color: color.withOpacity(0.3),
+                  blurRadius: 8,
+                  offset: Offset(0, 4),
                 ),
               ],
             ),
-            child: Icon(icon, color: Colors.white, size: 26),
+            child: Icon(icon, color: Colors.white, size: 30),
           ),
           const SizedBox(height: 8),
           Text(
             title,
-            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: Colors.black87,
+            ),
           ),
         ],
       ),
@@ -466,57 +554,59 @@ class _HomePageUserState extends State<HomePageUser> {
             borderRadius: BorderRadius.circular(20),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withOpacity(0.1),
-                blurRadius: 15,
-                offset: Offset(0, 5),
+                color: Colors.black.withOpacity(0.08),
+                blurRadius: 12,
+                offset: Offset(0, 4),
               ),
             ],
           ),
           child: Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              Row(
-                children: [
-                  Text(
-                    formattedDate,
-                    style: TextStyle(
-                      color: Colors.grey[600],
-                      fontSize: 12,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
               Text(
-                "07:00 - 17:00",
+                formattedDate,
                 style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 28,
-                  color: Colors.black,
+                  color: Colors.black87,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
                 ),
               ),
               const SizedBox(height: 16),
-              ElevatedButton(
+              Center(
+                child: Text(
+                  "08:00 - 18:00",
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 32,
+                    color: Colors.black,
+                    letterSpacing: 1,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              ElevatedButton.icon(
                 onPressed: () {
                   Navigator.push(
                     context,
                     MaterialPageRoute(builder: (_) => const MapsPage()),
                   );
                 },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Color(0xFFE75636),
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(30),
-                  ),
-                  minimumSize: Size(double.infinity, 48),
-                  elevation: 0,
-                ),
-                child: Text(
-                  "Cek Lokasi Anda",
+                icon: Icon(Icons.location_on, size: 20),
+                label: Text(
+                  "Cek lokasi",
                   style: TextStyle(
                     fontWeight: FontWeight.w600,
                     fontSize: 15,
                   ),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Color(0xFFD1644A),
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  minimumSize: Size(double.infinity, 48),
+                  elevation: 0,
                 ),
               ),
             ],
@@ -535,118 +625,325 @@ class _HomePageUserState extends State<HomePageUser> {
         children: [
           Text(
             "Aktivitas",
-            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: Colors.black87,
+            ),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 16),
           Container(
             width: double.infinity,
-            height: 200,
+            height: 280,
+            padding: EdgeInsets.all(20),
             decoration: BoxDecoration(
               color: Colors.white,
               borderRadius: BorderRadius.circular(16),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black12,
-                  blurRadius: 8,
-                  offset: Offset(0, 2),
+                  color: Colors.black.withOpacity(0.06),
+                  blurRadius: 10,
+                  offset: Offset(0, 3),
                 ),
               ],
             ),
-            child: IgnorePointer(
-              ignoring: true,
-              child: CustomPaint(
-                size: Size(160, 160),
-                painter: DonutChartPainter(),
-              ),
-            ),
+            child: _isLoadingStats
+                ? Center(
+                    child: CircularProgressIndicator(
+                      color: Color(0xFF36546C),
+                    ),
+                  )
+                : Center(
+                    child: SizedBox(
+                      width: 240,
+                      height: 240,
+                      child: CustomPaint(
+                        painter: DonutChartPainter(
+                          hadir: _totalHadir,
+                          izin: _totalIzin,
+                          sakit: _totalSakit,
+                          cuti: _totalCuti,
+                          proses: _totalProses,
+                        ),
+                      ),
+                    ),
+                  ),
           ),
         ],
       ),
     );
   }
 
-  // ===================== Detail Bar =====================
-  Widget _buildDetailBar({
-    required String title,
-    required double value,
-    required Color color,
-  }) {
+  // ===================== Detail Section =====================
+  Widget _buildDetailSection() {
+    final total = _totalHadir + _totalIzin + _totalSakit + _totalCuti + _totalProses;
+    
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Text(
-                title,
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                  color: color,
-                ),
-              ),
-              Spacer(),
-              Text(
-                "${(value * 100).toStringAsFixed(1)}%",
-                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
-              ),
-            ],
-          ),
-          const SizedBox(height: 6),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(6),
-            child: LinearProgressIndicator(
-              value: value,
-              minHeight: 8,
-              backgroundColor: Colors.grey[300],
-              valueColor: AlwaysStoppedAnimation(color),
+          Text(
+            "Detail",
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: Colors.black87,
             ),
+          ),
+          const SizedBox(height: 16),
+          _buildDetailBar(
+            title: "Hadir",
+            count: _totalHadir,
+            total: total,
+            color: Color(0xFF5BA3D0),
+          ),
+          const SizedBox(height: 12),
+          _buildDetailBar(
+            title: "Proses (belum check-out)",
+            count: _totalProses,
+            total: total,
+            color: Color(0xFFF5A623),
+          ),
+          const SizedBox(height: 12),
+          _buildDetailBar(
+            title: "Izin",
+            count: _totalIzin,
+            total: total,
+            color: Color(0xFFF8E71C),
+          ),
+          const SizedBox(height: 12),
+          _buildDetailBar(
+            title: "Sakit",
+            count: _totalSakit,
+            total: total,
+            color: Color(0xFF7ED321),
+          ),
+          const SizedBox(height: 12),
+          _buildDetailBar(
+            title: "Cuti",
+            count: _totalCuti,
+            total: total,
+            color: Color(0xFF9B59B6),
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildDetailBar({
+    required String title,
+    required int count,
+    required int total,
+    required Color color,
+  }) {
+    final value = total > 0 ? (count / total) : 0.0;
+    final percentage = (value * 100).toStringAsFixed(1);
+    
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              title,
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: Colors.black87,
+              ),
+            ),
+            Text(
+              "$percentage%",
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: Colors.black54,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Stack(
+          children: [
+            Container(
+              height: 8,
+              decoration: BoxDecoration(
+                color: Colors.grey[200],
+                borderRadius: BorderRadius.circular(4),
+              ),
+            ),
+            FractionallySizedBox(
+              widthFactor: value,
+              child: Container(
+                height: 8,
+                decoration: BoxDecoration(
+                  color: color,
+                  borderRadius: BorderRadius.circular(4),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ],
     );
   }
 }
 
 class DonutChartPainter extends CustomPainter {
+  final int hadir;
+  final int izin;
+  final int sakit;
+  final int cuti;
+  final int proses;
+
+  DonutChartPainter({
+    required this.hadir,
+    required this.izin,
+    required this.sakit,
+    required this.cuti,
+    required this.proses,
+  });
+
   @override
   void paint(Canvas canvas, Size size) {
-    final paint = Paint()..style = PaintingStyle.stroke;
+    final paint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 30
+      ..strokeCap = StrokeCap.butt;
+
     final center = Offset(size.width / 2, size.height / 2);
-    final radius = 60.0;
-    final strokeWidth = 20.0;
+    final radius = (size.width - 60) / 2;
 
-    paint.strokeWidth = strokeWidth;
-    paint.strokeCap = StrokeCap.round;
+    final total = hadir + izin + sakit + cuti + proses;
+    if (total == 0) {
+      paint.color = Colors.grey[300]!;
+      canvas.drawCircle(center, radius, paint);
+      
+      final textPainterEmpty = TextPainter(
+        text: const TextSpan(
+          text: 'Tidak ada data',
+          style: TextStyle(
+            color: Colors.grey,
+            fontSize: 12,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+        textDirection: ui.TextDirection.ltr,
+      );
+      textPainterEmpty.layout();
+      textPainterEmpty.paint(
+        canvas,
+        Offset(
+          center.dx - textPainterEmpty.width / 2,
+          center.dy - textPainterEmpty.height / 2,
+        ),
+      );
+      return;
+    }
 
-    final values = [0.655, 0.165, 0.062, 0.125];
-    final colors = [
-      Color(0xFF2196F3),
-      Color(0xFFFFA500),
-      Color(0xFFFFD700),
-      Color(0xFF4CAF50),
+    final values = [
+      hadir / total,
+      proses / total,
+      izin / total,
+      sakit / total,
+      cuti / total,
     ];
+
+    final colors = [
+      Color(0xFF5BA3D0), // Biru untuk Hadir
+      Color(0xFFF5A623), // Orange untuk Proses
+      Color(0xFFF8E71C), // Kuning untuk Izin
+      Color(0xFF7ED321), // Hijau untuk Sakit
+      Color(0xFF9B59B6), // Ungu untuk Cuti
+    ];
+
+    final labels = ['Hadir', 'Proses', 'Izin', 'Sakit', 'Cuti'];
+    final counts = [hadir, proses, izin, sakit, cuti];
 
     double startAngle = -90 * (3.14159 / 180);
 
+    // Draw arcs
     for (int i = 0; i < values.length; i++) {
-      paint.color = colors[i];
-      final sweepAngle = values[i] * 2 * 3.14159;
-      canvas.drawArc(
-        Rect.fromCircle(center: center, radius: radius),
-        startAngle,
-        sweepAngle,
-        false,
-        paint,
-      );
-      startAngle += sweepAngle;
-    }
+      if (values[i] > 0) {
+        paint.color = colors[i];
+        final sweepAngle = values[i] * 2 * 3.14159;
+        canvas.drawArc(
+          Rect.fromCircle(center: center, radius: radius),
+          startAngle,
+          sweepAngle,
+          false,
+          paint,
+        );
 
-    final innerPaint = Paint()..color = Colors.white;
-    canvas.drawCircle(center, radius - strokeWidth + 2, innerPaint);
+        // Calculate position for label (middle of the arc, outside)
+        final middleAngle = startAngle + (sweepAngle / 2);
+        final labelRadius = radius + 35; // Distance from center for labels
+        final labelX = center.dx + labelRadius * cos(middleAngle);
+        final labelY = center.dy + labelRadius * sin(middleAngle);
+
+        // Draw label text
+        final textPainter = TextPainter(
+          text: TextSpan(
+            text: labels[i],
+            style: TextStyle(
+              color: Colors.black54,
+              fontSize: 10,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          textDirection: ui.TextDirection.ltr,
+        );
+        textPainter.layout();
+
+        // Draw percentage
+        final percentage = (values[i] * 100).toStringAsFixed(1);
+        final percentPainter = TextPainter(
+          text: TextSpan(
+            text: '$percentage%',
+            style: TextStyle(
+              color: Colors.black87,
+              fontSize: 9,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          textDirection: ui.TextDirection.ltr,
+        );
+        percentPainter.layout();
+
+        // Position text based on angle
+        double textX = labelX - textPainter.width / 2;
+        double textY = labelY - textPainter.height / 2;
+
+        // Adjust for better positioning on sides
+        if (middleAngle > -1.5708 && middleAngle < 1.5708) {
+          // Right side
+          textX = labelX;
+        } else {
+          // Left side
+          textX = labelX - textPainter.width;
+        }
+
+        textPainter.paint(canvas, Offset(textX, textY - 8));
+        percentPainter.paint(
+          canvas,
+          Offset(textX + (textPainter.width - percentPainter.width) / 2, textY + 6),
+        );
+
+        startAngle += sweepAngle;
+      }
+    }
   }
 
+  double cos(double angle) => math.cos(angle);
+  double sin(double angle) => math.sin(angle);
+
   @override
-  bool shouldRepaint(DonutChartPainter oldDelegate) => false;
+  bool shouldRepaint(DonutChartPainter oldDelegate) =>
+      hadir != oldDelegate.hadir ||
+      izin != oldDelegate.izin ||
+      sakit != oldDelegate.sakit ||
+      cuti != oldDelegate.cuti ||
+      proses != oldDelegate.proses;
 }

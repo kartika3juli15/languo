@@ -7,18 +7,18 @@
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:675734136620:android:f3e6e2bfd4b827621eae89",
+        "mobilesdk_app_id": "1:675734136620:android:96597392b532eb6f1eae89",
         "android_client_info": {
-          "package_name": "com.example.languo"
+          "package_name": "com.example.sipresjti"
         }
       },
       "oauth_client": [
         {
-          "client_id": "675734136620-353hvb2pufdo579im10sm9047m9ljrgj.apps.googleusercontent.com",
+          "client_id": "675734136620-sllq47upfocsk701icv9fkp7mvkigo24.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {
-            "package_name": "com.example.languo",
-            "certificate_hash": "30559e5f5ee6409124aee4c36fafd837da2c1363"
+            "package_name": "com.example.sipresjti",
+            "certificate_hash": "ad1fd90e97332059165886698601daaf71838f6c"
           }
         },
         {
@@ -28,7 +28,7 @@
       ],
       "api_key": [
         {
-          "current_key": "AIzaSyArBhSSocdpTaqGlPnm5i6Fa-mREd9Ci60"
+          "current_key": "AIzaSyDLKQ9L-Mws0Fa-ZShSJTHqCGjcQSNhIqU"
         }
       ],
       "services": {

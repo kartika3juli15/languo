@@ -16,15 +16,32 @@ class _QRScannerPageState extends State<QRScannerPage> {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   bool _isScanned = false;
 
-  // ==============================
-  // CEK JAM 07:00 - 17:00
   bool _isWithinTimeRange() {
     final now = DateTime.now();
     final start = DateTime(now.year, now.month, now.day, 7, 0);
     final end = DateTime(now.year, now.month, now.day, 17, 0);
     return now.isAfter(start) && now.isBefore(end);
   }
-  // ==============================
+
+  /// AMBIL DATA USER DARI COLLECTION USERS
+  Future<Map<String, dynamic>?> _getUserData(String userId) async {
+    try {
+      final userDoc = await _firestore.collection('users').doc(userId).get();
+      
+      if (userDoc.exists) {
+        final data = userDoc.data() as Map<String, dynamic>;
+        return {
+          'nama': data['user_name'] ?? data['nama'] ?? 'Tanpa Nama',
+          'email': data['user_email'] ?? data['email'] ?? 'Tanpa Email',
+          'role': data['user_role'] ?? 'karyawan', // default karyawan jika kosong
+        };
+      }
+      return null;
+    } catch (e) {
+      debugPrint('Error getting user data: $e');
+      return null;
+    }
+  }
 
   Future<void> _processQR(String qrText) async {
     try {
@@ -35,13 +52,12 @@ class _QRScannerPageState extends State<QRScannerPage> {
 
       final data = jsonDecode(qrText);
       final expiresAtStr = data['expires_at'];
-      final token = data['token']; // anti fake
+      final token = data['token'];
       if (expiresAtStr == null || token == null) {
         _showMessage("QR tidak valid!");
         return;
       }
 
-      // Cek expired
       final expiresAt = DateTime.tryParse(expiresAtStr);
       if (expiresAt == null || DateTime.now().isAfter(expiresAt)) {
         _showMessage("QR sudah kedaluwarsa!");
@@ -56,10 +72,14 @@ class _QRScannerPageState extends State<QRScannerPage> {
 
       final currentUserId = user.uid;
 
-      final userDoc =
-          await _firestore.collection('users').doc(currentUserId).get();
-      final currentUserName =
-          userDoc.exists ? (userDoc.data()?['user_name'] ?? '') : '';
+      // ============================================
+      // AMBIL DATA USER (NAMA, EMAIL, ROLE)
+      // ============================================
+      final userData = await _getUserData(currentUserId);
+      if (userData == null) {
+        _showMessage("Data user tidak ditemukan!");
+        return;
+      }
 
       final now = DateTime.now();
       final dateKey =
@@ -67,15 +87,11 @@ class _QRScannerPageState extends State<QRScannerPage> {
 
       final docId = "${currentUserId}_$dateKey";
       final docRef = _firestore.collection('absensi').doc(docId);
-
       final docSnap = await docRef.get();
 
       final timeNow =
           "${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}";
 
-      // =========================================
-      // LOGIKA BARU: OTOMATIS TENTUKAN SESI
-      // =========================================
       bool hasCheckIn =
           docSnap.exists && (docSnap.data()?['check_in'] ?? '') != '';
       bool hasCheckOut =
@@ -85,8 +101,10 @@ class _QRScannerPageState extends State<QRScannerPage> {
       if (!hasCheckIn) {
         await docRef.set({
           "user_id": currentUserId,
-          "user_name": currentUserName,
-          "date": dateKey,
+          "nama": userData['nama'],        // ← FIELD BARU
+          "email": userData['email'],      // ← FIELD BARU
+          "role": userData['role'],        // ← FIELD BARU
+          "date": Timestamp.now(),         // ← PAKAI TIMESTAMP
           "check_in": timeNow,
           "check_out": "",
           "status": "Proses",
@@ -99,7 +117,6 @@ class _QRScannerPageState extends State<QRScannerPage> {
 
       // ===== CHECK-OUT =====
       if (hasCheckIn && !hasCheckOut) {
-        // Tentukan status
         final checkIn = docSnap.data()?['check_in'] ?? '';
         String newStatus = 'Tepat Waktu';
 
@@ -129,15 +146,20 @@ class _QRScannerPageState extends State<QRScannerPage> {
         return;
       }
     } catch (e) {
+      debugPrint('Error processing QR: $e');
       _showMessage("QR tidak valid!");
     } finally {
       Future.delayed(const Duration(milliseconds: 300), () {
-        setState(() => _isScanned = false);
+        if (mounted) {
+          setState(() => _isScanned = false);
+        }
       });
     }
   }
 
   void _showMessage(String text, {bool goToKehadiran = false}) {
+    if (!mounted) return;
+
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(text),
@@ -146,6 +168,8 @@ class _QRScannerPageState extends State<QRScannerPage> {
     );
 
     Future.delayed(const Duration(seconds: 2), () {
+      if (!mounted) return;
+
       if (goToKehadiran) {
         Navigator.pushReplacement(
           context,

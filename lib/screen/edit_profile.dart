@@ -7,12 +7,6 @@ import 'package:image_picker/image_picker.dart';
 import '../models/user_model.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:crypto/crypto.dart';
-import 'dart:convert';
-
-String hashPassword(String password) {
-  return sha256.convert(utf8.encode(password)).toString();
-}
 
 class EditProfilePage extends StatefulWidget {
   const EditProfilePage({super.key});
@@ -150,41 +144,59 @@ class _EditProfilePageState extends State<EditProfilePage> {
     final newPass = newPassController.text.trim();
 
     try {
-      // Update Nama
+      // ===== Update Nama =====
       if (newName.isNotEmpty && newName != user!.userName) {
         await firebaseUser.updateDisplayName(newName);
+
         await FirebaseFirestore.instance
             .collection("users")
             .doc(user!.uid)
-            .update({"user_name": newName});
+            .update({
+          "user_name": newName,
+          "updated_at": FieldValue.serverTimestamp(),
+        });
       }
 
-      // Update Password
+      // ===== Update Password =====
       if (oldPass.isNotEmpty || newPass.isNotEmpty) {
         if (oldPass.isEmpty || newPass.isEmpty) {
           throw "Password lama dan password baru wajib diisi.";
         }
 
-        final encodedOld = hashPassword(oldPass);
-        if (encodedOld != user!.userPass) {
-          throw "Password lama tidak sesuai!";
-        }
-
-        final cred = EmailAuthProvider.credential(
-          email: user!.userEmail,
-          password: oldPass,
+        // Tampilkan loading saat reauth + update password
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (_) => const Center(
+            child: CircularProgressIndicator(),
+          ),
         );
-        await firebaseUser.reauthenticateWithCredential(cred);
-        await firebaseUser.updatePassword(newPass);
-        final encodedNew = hashPassword(newPass);
-        await FirebaseFirestore.instance
-            .collection("users")
-            .doc(user!.uid)
-            .update({"user_password": encodedNew});
+
+        try {
+          // Reauthenticate dengan password lama
+          final cred = EmailAuthProvider.credential(
+            email: firebaseUser.email!,
+            password: oldPass,
+          );
+          await firebaseUser.reauthenticateWithCredential(cred);
+
+          // Update password baru
+          await firebaseUser.updatePassword(newPass);
+
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text("Password berhasil diperbarui")),
+          );
+        } on FirebaseAuthException catch (e) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text("Gagal update password: ${e.message}")),
+          );
+        } finally {
+          Navigator.pop(context); // tutup loading
+        }
       }
 
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Profil berhasil diperbarui.")),
+        const SnackBar(content: Text("Profil berhasil diperbarui")),
       );
       Navigator.pop(context);
     } catch (e) {

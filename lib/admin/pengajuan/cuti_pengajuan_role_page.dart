@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:languo/admin/verifikasi/cuti_verifikasi_admin_page.dart';
+import 'package:languo/admin/home_page.dart';
 
 class PengajuanCutiPage extends StatefulWidget {
   const PengajuanCutiPage({super.key});
@@ -36,35 +37,35 @@ class _PengajuanCutiPageState extends State<PengajuanCutiPage> {
           bottomRight: Radius.circular(40),
         ),
       ),
-      child: Stack(
-        children: [
-          Align(
-            alignment: Alignment.centerLeft,
-            child: GestureDetector(
-              onTap: () => Navigator.pop(context),
-              child: const Padding(
-                padding: EdgeInsets.only(left: 16),
-                child: Icon(Icons.arrow_back, color: Colors.white, size: 28),
-              ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 20),
+        child: Row(
+          children: [
+            InkWell(
+              onTap: () {
+                Navigator.pushReplacement(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const HomeAdmin(),
+                  ),
+                );
+              },
+              child:
+                  const Icon(Icons.arrow_back, color: Colors.white, size: 26),
             ),
-          ),
-          const Align(
-            alignment: Alignment.center,
-            child: Text(
-              "Cuti",
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 22,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-          ),
-        ],
+            const SizedBox(width: 10),
+            Text("Cuti",
+                style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold)),
+          ],
+        ),
       ),
     );
   }
 
-  // ========================= MENU UNTUK PER ROLE =========================
+  // ========================= MENU PILIH ROLE =========================
   Widget _menuRole(String role) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20),

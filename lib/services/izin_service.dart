@@ -18,7 +18,6 @@ class IzinService {
     final storagePath = 'izin_lampiran/$userId/${timestamp}_$cleanFileName';
     final ref = _storage.ref().child(storagePath);
 
-    // Tentukan content type
     String ext = fileName.split(".").last.toLowerCase();
     String contentType = {
           "jpg": "image/jpeg",
@@ -37,20 +36,21 @@ class IzinService {
     final url = await ref.getDownloadURL();
 
     return {
-      "lampiranUrl": url,
-      "storagePath": storagePath,
+      "lampiran_url": url,
+      "storage_path": storagePath,
     };
   }
 
   /// Kirim pengajuan izin ke Firestore
   Future<void> kirimPengajuan({
     required String userId,
-    required DateTime startDate,
-    required DateTime endDate,
+    required String perihal,
+    required DateTime tanggalMulai,
+    required DateTime tanggalSelesai,
     required Uint8List lampiranBytes,
     required String fileName,
-    required String perihal,
     String? keterangan,
+    DateTime? tanggalVerifikasi,
   }) async {
     try {
       // Ambil data user
@@ -69,18 +69,19 @@ class IzinService {
 
       // Simpan ke Firestore
       await _firestore.collection("pengajuan_izin").add({
-        "userId": userId,
-        "userName": userName,
-        "userRole": userRole,
-        "userEmail": userEmail,
+        "user_id": userId,
+        "user_name": userName,
+        "user_role": userRole,
+        "user_email": userEmail,
         "perihal": perihal,
-        "tanggalMulai": Timestamp.fromDate(startDate),
-        "tanggalSelesai": Timestamp.fromDate(endDate),
+        "tanggal_mulai": Timestamp.fromDate(tanggalMulai),
+        "tanggal_selesai": Timestamp.fromDate(tanggalSelesai),
         "keterangan": keterangan,
-        "lampiranUrl": uploadResult["lampiranUrl"],
-        "storagePath": uploadResult["storagePath"],
+        "lampiran_url": uploadResult["lampiran_url"],
+        "storage_path": uploadResult["storage_path"],
         "status": "Diajukan",
-        "createdAt": FieldValue.serverTimestamp(),
+        "created_at": FieldValue.serverTimestamp(),
+        "tanggal_verifikasi": tanggalVerifikasi,
       });
     } catch (e) {
       debugPrint("Error kirim pengajuan izin: $e");

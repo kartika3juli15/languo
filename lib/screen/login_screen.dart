@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:flutter_facebook_auth/flutter_facebook_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import '../admin/home_page.dart';
+import '../users/home_page.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -15,20 +18,52 @@ class _LoginScreenState extends State<LoginScreen> {
   final TextEditingController passwordController = TextEditingController();
 
   bool showPassword = false;
-  int _selectedIndex = 0;
 
   // ================= FIREBASE AUTH METHODS =================
   Future<void> loginUser() async {
     try {
-      await FirebaseAuth.instance.signInWithEmailAndPassword(
+      // 1. Lakukan Otentikasi dan dapatkan UserCredential
+      UserCredential userCred =
+          await FirebaseAuth.instance.signInWithEmailAndPassword(
         email: emailController.text.trim(),
         password: passwordController.text.trim(),
       );
-      ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text("Login Berhasil")));
+
+      if (mounted) {
+        // Tampilkan notifikasi keberhasilan
+        ScaffoldMessenger.of(context)
+            .showSnackBar(const SnackBar(content: Text("Login Berhasil")));
+
+        final user = userCred.user;
+
+        if (user != null) {
+          // 2. Ambil Role secara SINKRON (menggunakan .get() bukan stream)
+          final doc = await FirebaseFirestore.instance
+              .collection('users')
+              .doc(user.uid)
+              .get();
+
+          // Dapatkan role, default ke 'Karyawan' jika tidak ditemukan (atau role default Anda)
+          final role = doc.data()?['user_role'] ?? 'Karyawan';
+
+          // 3. Tentukan Halaman Tujuan berdasarkan Role
+          // Pastikan HomeAdmin dan HomePageUser sudah diimpor
+          Widget nextPage =
+              role == "Admin" ? const HomeAdmin() : const HomePageUser();
+
+          // 4. Navigasi Instan (menggantikan LoginScreen di stack)
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (context) => nextPage),
+          );
+        }
+      }
     } catch (e) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text("Error: $e")));
+      if (mounted) {
+        // Jika terjadi error pada otentikasi (misal: password salah)
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text("Error: $e")));
+      }
     }
   }
 
@@ -154,8 +189,8 @@ class _LoginScreenState extends State<LoginScreen> {
                   const SizedBox(height: 35),
 
                   // Divider
-                  Row(
-                    children: const [
+                  const Row(
+                    children: [
                       Expanded(child: Divider()),
                       Padding(
                         padding: EdgeInsets.symmetric(horizontal: 8),
@@ -196,23 +231,6 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   // ================= WIDGETS =================
-
-  Widget _tabButton(String text, bool isActive, VoidCallback onTap) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Center(
-        child: Text(
-          text,
-          style: TextStyle(
-            color: isActive ? Colors.white : Colors.grey.shade700,
-            fontWeight: FontWeight.w600,
-            fontSize: 16,
-          ),
-        ),
-      ),
-    );
-  }
-
   Widget _socialButton({
     required String icon,
     required String label,

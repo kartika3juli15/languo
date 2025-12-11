@@ -14,11 +14,27 @@
       },
       "oauth_client": [
         {
-          "client_id": "675734136620-sllq47upfocsk701icv9fkp7mvkigo24.apps.googleusercontent.com",
+          "client_id": "675734136620-io94v5r93kbat9sg7llsurdepu0pphd5.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {
             "package_name": "com.example.sipresjti",
-            "certificate_hash": "ad1fd90e97332059165886698601daaf71838f6c"
+            "certificate_hash": "34e163f88e649068cf25830027be8c923bed852a"
+          }
+        },
+        {
+          "client_id": "675734136620-ke2mml6ce1tnjmkc7f9omnc5g2n7agro.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.sipresjti",
+            "certificate_hash": "dca5cc813ae0bd1e4b30636144ec262438276896"
+          }
+        },
+        {
+          "client_id": "675734136620-vmake2md4b0btahid9p2r21v6skusu9h.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.sipresjti",
+            "certificate_hash": "0d25f33e25c8a1f624b93e229dcbb1d7e5153165"
           }
         },
         {
@@ -39,10 +55,10 @@
               "client_type": 3
             },
             {
-              "client_id": "675734136620-kq38lclph5o46npdvj93p5h3dk7kcbf1.apps.googleusercontent.com",
+              "client_id": "675734136620-56idiltudp2e4p93ah0at0q4479t365u.apps.googleusercontent.com",
               "client_type": 2,
               "ios_info": {
-                "bundle_id": "com.example.languo"
+                "bundle_id": "com.company.sipresjti"
               }
             }
           ]

@@ -50,3 +50,8 @@ flutter:
   assets:
     - assets/google.png
     - assets/facebook.png
+    - assets/bgbelakang.png
+    - assets/bgdepan.png
+    - assets/logosipres.png
+    - assets/book_icon.png
+    - assets/jti.png

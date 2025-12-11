@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
-import 'package:languo/routes/routes_manager.dart';
 import 'firebase_options.dart';
 import 'package:intl/date_symbol_data_local.dart';
+import 'screen/onboarding_screen.dart';
+import 'routes/routes_manager.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -10,11 +12,16 @@ void main() async {
     options: DefaultFirebaseOptions.currentPlatform,
   );
   await initializeDateFormatting('id_ID', null);
-  runApp(const MyApp());
+
+  final user = FirebaseAuth.instance.currentUser;
+
+  runApp(MyApp(initialUser: user));
 }
 
 class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+  final User? initialUser;
+
+  const MyApp({super.key, required this.initialUser});
 
   @override
   Widget build(BuildContext context) {
@@ -25,7 +32,7 @@ class MyApp extends StatelessWidget {
         primarySwatch: Colors.blue,
         useMaterial3: true,
       ),
-      home: const AuthPage(),
+      home: initialUser != null ? const AuthPage() : const OnboardingScreen(),
     );
   }
 }

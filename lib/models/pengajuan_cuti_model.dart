@@ -62,20 +62,28 @@ class PengajuanCutiModel {
 
     return PengajuanCutiModel(
       cutiId: doc.id,
-      userId: data["user_id"],
-      userName: data["user_name"],
-      userRole: data["user_role"],
-      userEmail: data["user_email"],
-      alasan: data["alasan"],
-      tanggalMulai: (data["tanggal_mulai"] as Timestamp).toDate(),
-      tanggalSelesai: (data["tanggal_selesai"] as Timestamp).toDate(),
+      userId: data["user_id"] ?? '',
+      userName: data["user_name"] ?? '',
+      userRole: data["user_role"] ?? '',
+      userEmail: data["user_email"] ?? '',
+      alasan: data["alasan"] ?? '',
+      tanggalMulai: data["tanggal_mulai"] != null
+          ? (data["tanggal_mulai"] as Timestamp).toDate()
+          : DateTime.now(),
+      tanggalSelesai: data["tanggal_selesai"] != null
+          ? (data["tanggal_selesai"] as Timestamp).toDate()
+          : DateTime.now(),
       keterangan: data["keterangan"],
       lampiranUrl: data["lampiran_url"],
       fileName: data["file_name"],
-      sisaCutiSaatPengajuan: data["sisa_cuti_saat_pengajuan"],
-      status: data["status"],
-      createdAt: (data["created_at"] as Timestamp).toDate(),
-      tanggalVerifikasi: (data["tanggal_verifikasi"] as Timestamp).toDate(),
+      sisaCutiSaatPengajuan: data["sisa_cuti_saat_pengajuan"] ?? 0,
+      status: data["status"] ?? '',
+      createdAt: data["created_at"] != null
+          ? (data["created_at"] as Timestamp).toDate()
+          : DateTime.now(),
+      tanggalVerifikasi: data["tanggal_verifikasi"] != null
+          ? (data["tanggal_verifikasi"] as Timestamp).toDate()
+          : null,
     );
   }
 }

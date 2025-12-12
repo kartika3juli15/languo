@@ -19,7 +19,18 @@ class _LoginScreenState extends State<LoginScreen> {
 
   bool showPassword = false;
 
-  // ================= FIREBASE AUTH METHODS =================
+  // Colors
+  static const Color accentColor = Color(0xFFE75636);
+  static const Color primaryColor = Color(0xFF2B3541);
+  static const Color backgroundColor = Color(0xFFF3F7F7);
+
+  static const int alpha70 = 179;
+  static const int alpha50 = 128;
+
+  // =====================================================================
+  // AUTH FUNCTIONS
+  // =====================================================================
+
   Future<void> loginUser() async {
     try {
       // 1. Lakukan Otentikasi dan dapatkan UserCredential
@@ -69,23 +80,46 @@ class _LoginScreenState extends State<LoginScreen> {
 
   Future<void> loginGoogle() async {
     try {
-      final GoogleSignInAccount? gUser = await GoogleSignIn().signIn();
-      if (gUser == null) return;
+      final googleUser = await GoogleSignIn().signIn();
+      if (googleUser == null) return;
 
-      final gAuth = await gUser.authentication;
+      final googleAuth = await googleUser.authentication;
 
       final credential = GoogleAuthProvider.credential(
-        accessToken: gAuth.accessToken,
-        idToken: gAuth.idToken,
+        accessToken: googleAuth.accessToken,
+        idToken: googleAuth.idToken,
       );
 
-      await FirebaseAuth.instance.signInWithCredential(credential);
+      UserCredential userCred =
+          await FirebaseAuth.instance.signInWithCredential(credential);
 
-      ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text("Login Google Berhasil")));
+      final user = userCred.user;
+      if (user == null) return;
+
+      final docRef =
+          FirebaseFirestore.instance.collection("users").doc(user.uid);
+
+      final doc = await docRef.get();
+
+      if (!doc.exists) {
+        await docRef.set({
+          "user_id": user.uid,
+          "user_name": user.displayName ?? "User Baru",
+          "user_email": user.email ?? "",
+          "user_role": "Karyawan",
+          "sisa_cuti": 100,
+          "user_photo": user.photoURL ?? "",
+          "created_at": FieldValue.serverTimestamp(),
+        });
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Login Google Berhasil")),
+      );
     } catch (e) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text("Google Error: $e")));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Google Error: $e")),
+      );
     }
   }
 
@@ -100,137 +134,270 @@ class _LoginScreenState extends State<LoginScreen> {
         await FirebaseAuth.instance.signInWithCredential(credential);
 
         ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text("Login Facebook Berhasil")));
+          const SnackBar(content: Text("Login Facebook Berhasil")),
+        );
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text("Facebook login gagal")));
+          const SnackBar(content: Text("Facebook login gagal")),
+        );
       }
     } catch (e) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text("Facebook Error: $e")));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Facebook Error: $e")),
+      );
     }
   }
 
-  // ================= MAIN UI =================
+  // =====================================================================
+  // UI
+  // =====================================================================
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Column(
-        children: [
-          // ================= HEADER =================
-          Container(
-            width: double.infinity,
-            height: 150,
-            decoration: const BoxDecoration(
-              color: Color(0xFF36546C),
-              borderRadius: BorderRadius.only(
-                bottomLeft: Radius.circular(40),
-                bottomRight: Radius.circular(40),
+      backgroundColor: backgroundColor,
+      body: SafeArea(
+        child: SingleChildScrollView(
+          child: Column(
+            children: [
+              // ==========================================================
+              // HEADER BARU
+              // ==========================================================
+              Container(
+                height: 80,
+                width: double.infinity,
+                decoration: const BoxDecoration(
+                  color: Color(0xFF36546C),
+                  borderRadius: BorderRadius.only(
+                    bottomLeft: Radius.circular(40),
+                    bottomRight: Radius.circular(40),
+                  ),
+                ),
               ),
-            ),
-          ),
 
-          // ================= CONTENT =================
-          Expanded(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              child: Column(
-                children: [
-                  const SizedBox(height: 10),
-                  const Text(
-                    "Selamat Datang!",
-                    style: TextStyle(
-                      fontSize: 28,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
+              const SizedBox(height: 40),
 
-                  const SizedBox(height: 25),
-
-                  _inputField(
-                    icon: Icons.email_outlined,
-                    hint: "Email",
-                    controller: emailController,
-                  ),
-
-                  _inputField(
-                    icon: Icons.lock_outline,
-                    hint: "Password",
-                    controller: passwordController,
-                    obscure: !showPassword,
-                    isPassword: true,
-                  ),
-
-                  const SizedBox(height: 20),
-
-                  // BUTTON LOGIN
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton(
-                      onPressed: loginUser,
-                      style: ElevatedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        backgroundColor: const Color(0xFF2B3541),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(30),
-                        ),
-                      ),
-                      child: const Text(
-                        "Login",
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white,
-                        ),
+              // ==========================================================
+              // BRANDING + LOGO STACK (VERSI UKURAN FIX)
+              // ==========================================================
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                child: Column(
+                  children: [
+                    const Text(
+                      "Selamat Datang",
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 30,
+                        fontWeight: FontWeight.w900,
+                        color: Color.fromARGB(255, 92, 92, 92),
                       ),
                     ),
-                  ),
 
-                  const SizedBox(height: 35),
+                    const SizedBox(height: 30),
 
-                  // Divider
-                  const Row(
-                    children: [
-                      Expanded(child: Divider()),
-                      Padding(
-                        padding: EdgeInsets.symmetric(horizontal: 8),
-                        child: Text("Or Sign In With"),
+                    SizedBox(
+                      width: 160,
+                      height: 160,
+                      child: Stack(
+                        alignment: Alignment.center,
+                        children: [
+                          Positioned(
+                            top: -2,
+                            right: 16,
+                            child: Image.asset(
+                              "assets/bgbelakang.png",
+                              width: 115,
+                            ),
+                          ),
+                          Positioned(
+                            child: Image.asset(
+                              "assets/bgdepan.png",
+                              width: 110,
+                            ),
+                          ),
+                          Positioned(
+                            child: Image.asset(
+                              "assets/logosipres.png",
+                              width: 90,
+                            ),
+                          ),
+                        ],
                       ),
-                      Expanded(child: Divider()),
-                    ],
-                  ),
+                    ),
 
-                  const SizedBox(height: 20),
+                    const SizedBox(height: 10),
 
-                  // SOCIAL BUTTONS
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      _socialButton(
-                        icon: "assets/google.png",
-                        label: "Google",
-                        onTap: loginGoogle,
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Text(
+                          "S",
+                          style: TextStyle(
+                            fontSize: 30,
+                            color: primaryColor,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                        const Text(
+                          "ipres",
+                          style: TextStyle(
+                            fontSize: 22,
+                            color: primaryColor,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        Image.asset(
+                          "assets/jti.png",
+                          height: 30,
+                        ),
+                      ],
+                    ),
+
+                    const SizedBox(height: 20),
+
+                    Text(
+                      "Silakan Logn untuk melanjutkan!",
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
+                        color: primaryColor.withAlpha(alpha70),
                       ),
-                      const SizedBox(width: 20),
-                      _socialButton(
-                        icon: "assets/facebook.png",
-                        label: "Facebook",
-                        onTap: loginFacebook,
-                      ),
-                    ],
-                  ),
+                    ),
 
-                  const SizedBox(height: 20)
-                ],
+                    const SizedBox(height: 20),
+
+                    // ================= INPUT =================
+                    _inputField(
+                      icon: Icons.email_outlined,
+                      hint: "Email",
+                      controller: emailController,
+                    ),
+
+                    _inputField(
+                      icon: Icons.lock_outline,
+                      hint: "Password",
+                      controller: passwordController,
+                      obscure: !showPassword,
+                      isPassword: true,
+                    ),
+
+                    const SizedBox(height: 10),
+
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton(
+                        onPressed: loginUser,
+                        style: ElevatedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          backgroundColor: accentColor,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(30),
+                          ),
+                        ),
+                        child: const Text(
+                          "Login",
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                    ),
+
+                    const SizedBox(height: 30),
+
+                    Row(
+                      children: [
+                        const Expanded(child: Divider()),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 8),
+                          child: Text(
+                            "Or Sign In With",
+                            style: TextStyle(
+                              color: primaryColor.withAlpha(alpha70),
+                            ),
+                          ),
+                        ),
+                        const Expanded(child: Divider()),
+                      ],
+                    ),
+
+                    const SizedBox(height: 25),
+
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        _socialButton(
+                          icon: "assets/google.png",
+                          label: "Google",
+                          onTap: loginGoogle,
+                        ),
+                        const SizedBox(width: 20),
+                        _socialButton(
+                          icon: "assets/facebook.png",
+                          label: "Facebook",
+                          onTap: loginFacebook,
+                        ),
+                      ],
+                    ),
+
+                    const SizedBox(height: 160),
+                  ],
+                ),
               ),
-            ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
 
-  // ================= WIDGETS =================
+  // =====================================================================
+  // WIDGETS
+  // =====================================================================
+
+  Widget _inputField({
+    required IconData icon,
+    required String hint,
+    required TextEditingController controller,
+    bool obscure = false,
+    bool isPassword = false,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 14),
+      child: TextField(
+        controller: controller,
+        obscureText: obscure,
+        cursorColor: primaryColor,
+        decoration: InputDecoration(
+          prefixIcon: Icon(icon, color: primaryColor),
+          hintText: hint,
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: const BorderSide(color: primaryColor, width: 2),
+          ),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: BorderSide(color: primaryColor.withAlpha(alpha50)),
+          ),
+          suffixIcon: isPassword
+              ? IconButton(
+                  icon: Icon(
+                    showPassword ? Icons.visibility : Icons.visibility_off,
+                    color: primaryColor,
+                  ),
+                  onPressed: () {
+                    setState(() => showPassword = !showPassword);
+                  },
+                )
+              : null,
+        ),
+      ),
+    );
+  }
+
   Widget _socialButton({
     required String icon,
     required String label,
@@ -263,41 +430,10 @@ class _LoginScreenState extends State<LoginScreen> {
               style: const TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.w500,
+                color: primaryColor,
               ),
             ),
           ],
-        ),
-      ),
-    );
-  }
-
-  Widget _inputField({
-    required IconData icon,
-    required String hint,
-    required TextEditingController controller,
-    bool obscure = false,
-    bool isPassword = false,
-  }) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 14),
-      child: TextField(
-        controller: controller,
-        obscureText: obscure,
-        decoration: InputDecoration(
-          prefixIcon: Icon(icon),
-          hintText: hint,
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
-          suffixIcon: isPassword
-              ? IconButton(
-                  icon: Icon(
-                      showPassword ? Icons.visibility : Icons.visibility_off),
-                  onPressed: () {
-                    setState(() => showPassword = !showPassword);
-                  },
-                )
-              : null,
         ),
       ),
     );

@@ -27,57 +27,112 @@ class _LoginScreenState extends State<LoginScreen> {
   static const int alpha70 = 179;
   static const int alpha50 = 128;
 
-  // =====================================================================
-  // AUTH FUNCTIONS
-  // =====================================================================
-
+  // ===============================================================
+  //                          LOGIN USER
+  // ===============================================================
   Future<void> loginUser() async {
+    String email = emailController.text.trim();
+    String password = passwordController.text.trim();
+
+    // ========================================================
+    // VALIDASI INPUTAN
+    // ========================================================
+
+    // Tidak isi email + password
+    if (email.isEmpty && password.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Belum mengisi email dan password")),
+      );
+      return;
+    }
+
+    // Hanya isi email, password kosong
+    if (email.isNotEmpty && password.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Password belum diisi")),
+      );
+      return;
+    }
+
+    // Hanya isi password, email kosong
+    if (email.isEmpty && password.isNotEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Email belum diisi")),
+      );
+      return;
+    }
+
+    // Format email tidak valid
+    final emailRegex = RegExp(r"^[a-zA-Z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}$");
+    if (!emailRegex.hasMatch(email)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Email tidak sesuai format")),
+      );
+      return;
+    }
+
+    // ========================================================
+    // PROSES LOGIN FIREBASE
+    // ========================================================
     try {
-      // 1. Lakukan Otentikasi dan dapatkan UserCredential
       UserCredential userCred =
           await FirebaseAuth.instance.signInWithEmailAndPassword(
-        email: emailController.text.trim(),
-        password: passwordController.text.trim(),
+        email: email,
+        password: password,
       );
 
-      if (mounted) {
-        // Tampilkan notifikasi keberhasilan
-        ScaffoldMessenger.of(context)
-            .showSnackBar(const SnackBar(content: Text("Login Berhasil")));
+      // Login berhasil
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Login berhasil")),
+      );
 
-        final user = userCred.user;
+      final user = userCred.user;
 
-        if (user != null) {
-          // 2. Ambil Role secara SINKRON (menggunakan .get() bukan stream)
-          final doc = await FirebaseFirestore.instance
-              .collection('users')
-              .doc(user.uid)
-              .get();
+      if (user != null) {
+        final doc = await FirebaseFirestore.instance
+            .collection('users')
+            .doc(user.uid)
+            .get();
 
-          // Dapatkan role, default ke 'Karyawan' jika tidak ditemukan (atau role default Anda)
-          final role = doc.data()?['user_role'] ?? 'Karyawan';
+        final role = doc.data()?['user_role'] ?? 'Karyawan';
 
-          // 3. Tentukan Halaman Tujuan berdasarkan Role
-          // Pastikan HomeAdmin dan HomePageUser sudah diimpor
-          Widget nextPage =
-              role == "Admin" ? const HomeAdmin() : const HomePageUser();
+        Widget nextPage =
+            role == "Admin" ? const HomeAdmin() : const HomePageUser();
 
-          // 4. Navigasi Instan (menggantikan LoginScreen di stack)
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(builder: (context) => nextPage),
-          );
-        }
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (context) => nextPage),
+        );
+      }
+    } on FirebaseAuthException catch (e) {
+      // Error dari Firebase
+      if (e.code == 'wrong-password') {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Password anda salah")),
+        );
+      } else if (e.code == 'user-not-found') {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Data tidak terdaftar")),
+        );
+      } else if (e.code == 'invalid-email') {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Email anda salah")),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Error: ${e.message}")),
+        );
       }
     } catch (e) {
-      if (mounted) {
-        // Jika terjadi error pada otentikasi (misal: password salah)
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text("Error: $e")));
-      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Error: $e")),
+      );
     }
   }
 
+  // ===============================================================
+  //                       LOGIN GOOGLE
+  // ===============================================================
   Future<void> loginGoogle() async {
     try {
       final googleUser = await GoogleSignIn().signIn();
@@ -123,6 +178,9 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
+  // ===============================================================
+  //                      LOGIN FACEBOOK
+  // ===============================================================
   Future<void> loginFacebook() async {
     try {
       final result = await FacebookAuth.instance.login();
@@ -148,9 +206,9 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
-  // =====================================================================
-  // UI
-  // =====================================================================
+  // ===============================================================
+  //                          UI LOGIN PAGE
+  // ===============================================================
 
   @override
   Widget build(BuildContext context) {
@@ -160,9 +218,7 @@ class _LoginScreenState extends State<LoginScreen> {
         child: SingleChildScrollView(
           child: Column(
             children: [
-              // ==========================================================
-              // HEADER BARU
-              // ==========================================================
+              // HEADER =====================================================
               Container(
                 height: 80,
                 width: double.infinity,
@@ -177,9 +233,6 @@ class _LoginScreenState extends State<LoginScreen> {
 
               const SizedBox(height: 40),
 
-              // ==========================================================
-              // BRANDING + LOGO STACK (VERSI UKURAN FIX)
-              // ==========================================================
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 20),
                 child: Column(
@@ -267,13 +320,14 @@ class _LoginScreenState extends State<LoginScreen> {
 
                     const SizedBox(height: 20),
 
-                    // ================= INPUT =================
+                    // ================= INPUT EMAIL =================
                     _inputField(
                       icon: Icons.email_outlined,
                       hint: "Email",
                       controller: emailController,
                     ),
 
+                    // ================= INPUT PASSWORD ===============
                     _inputField(
                       icon: Icons.lock_outline,
                       hint: "Password",
@@ -354,10 +408,9 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
-  // =====================================================================
-  // WIDGETS
-  // =====================================================================
-
+  // ===============================================================
+  // WIDGET INPUT FIELD
+  // ===============================================================
   Widget _inputField({
     required IconData icon,
     required String hint,
@@ -398,6 +451,9 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
+  // ===============================================================
+  // SOCIAL BUTTONS
+  // ===============================================================
   Widget _socialButton({
     required String icon,
     required String label,

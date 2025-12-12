@@ -13,8 +13,8 @@ class MapsPage extends StatefulWidget {
 class _MapsPageState extends State<MapsPage> {
   Completer<GoogleMapController> _controller = Completer();
 
-  /// TITIK KANTOR (GANTI SESUAI KEBUTUHAN)
-  final LatLng kantorPos = const LatLng(-7.9797, 112.6304); // contoh Malang
+  /// KOORDINAT
+  final LatLng kantorPos = const LatLng(-7.9444039, 112.614712);
 
   Position? currentPosition;
   double? distanceMeter;

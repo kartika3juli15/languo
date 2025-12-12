@@ -5,21 +5,31 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../../services/cuti_service.dart';
 import '../rekapan/cuti_rekapan_user_page.dart';
+import 'package:intl/intl.dart';
 
 class PengajuanCutiPage extends StatefulWidget {
-  const PengajuanCutiPage({super.key});
+  final int initialTab;
+
+  const PengajuanCutiPage({super.key, this.initialTab = 0});
 
   @override
   State<PengajuanCutiPage> createState() => _PengajuanCutiPageState();
 }
 
 class _PengajuanCutiPageState extends State<PengajuanCutiPage> {
+  // ======================== PROPERTI & CONTROLLER ========================
   final _cutiService = CutiService();
   final _auth = FirebaseAuth.instance;
 
-  int selectedTab = 0;
   DateTime? startDate;
   DateTime? endDate;
+  num? sisaCutiSaatPengajuan;
+  List<DateTime> _holidays = [];
+
+
+  bool isFetchingCuti = true;
+  bool isLoading = false;
+  bool isSubmitted = false;
 
   Uint8List? lampiranBytes;
   String? lampiranName;
@@ -27,48 +37,168 @@ class _PengajuanCutiPageState extends State<PengajuanCutiPage> {
   final TextEditingController alasanController = TextEditingController();
   final TextEditingController keteranganController = TextEditingController();
 
-  bool isSubmitted = false;
-  bool isLoading = false;
+  int selectedTab = 0;
 
-  num? sisaCutiSaatPengajuan;
-  bool isFetchingCuti = true;
-
+  // ======================== INIT & DISPOSE ========================
   @override
   void initState() {
     super.initState();
+    Intl.defaultLocale = 'id_ID';
+    selectedTab = widget.initialTab;
     fetchSisaCuti();
+    loadHolidays();
+  }
+
+  @override
+  void dispose() {
+    alasanController.dispose();
+    keteranganController.dispose();
+    super.dispose();
+  }
+
+  // ======================== FIREBASE FETCHERS ========================
+
+  /// Mengambil daftar Hari Libur Nasional dari Firestore dan menyimpannya di [_holidays].
+  Future<void> loadHolidays() async {
+    try {
+      final snap =
+          await FirebaseFirestore.instance.collection("holidays").get();
+
+      final List<DateTime> fetchedHolidays = snap.docs.map((d) {
+        final ts = d['date'] as Timestamp;
+        final dt = ts.toDate();
+        // Normalisasi hanya ke tanggal (mengabaikan waktu)
+        return DateTime(dt.year, dt.month, dt.day);
+      }).toList();
+
+      setState(() {
+        _holidays = fetchedHolidays;
+      });
+    } catch (e) {
+      _showMessage("Gagal memuat hari libur: $e");
+    }
   }
 
   Future<void> fetchSisaCuti() async {
-    String userId = _auth.currentUser!.uid;
-    final doc =
-        await FirebaseFirestore.instance.collection("users").doc(userId).get();
+    setState(() => isFetchingCuti = true);
+    try {
+      String userId = _auth.currentUser!.uid;
+      final doc = await FirebaseFirestore.instance
+          .collection("users")
+          .doc(userId)
+          .get();
 
-    setState(() {
-      sisaCutiSaatPengajuan = (doc.data()?["sisa_cuti"] ?? 0) as num;
-      isFetchingCuti = false;
-    });
+      setState(() {
+        sisaCutiSaatPengajuan = (doc.data()?["sisa_cuti"] ?? 0) as num;
+      });
+    } catch (e) {
+      _showMessage("Gagal memuat sisa cuti: $e");
+      setState(() {
+        sisaCutiSaatPengajuan = 0;
+      });
+    } finally {
+      setState(() => isFetchingCuti = false);
+    }
   }
 
-  // ======================== TANGGAL ========================
+  // ======================== HELPERS TANGGAL ========================
+
+  /// Mengembalikan nama bulan sesuai indeks
+  String _monthName(int m) {
+    const b = [
+      "Januari",
+      "Februari",
+      "Maret",
+      "April",
+      "Mei",
+      "Juni",
+      "Juli",
+      "Agustus",
+      "September",
+      "Oktober",
+      "November",
+      "Desember"
+    ];
+    // Karena list 0-indexed dan bulan 1-indexed
+    return b[m - 1];
+  }
+
+  /// Format tanggal penuh (e.g., 12 Januari 2025) menggunakan helper manual.
+  String _formatFullDate(DateTime date) {
+    return "${date.day} ${_monthName(date.month)} ${date.year}";
+  }
+
+  /// Format tanggal dengan hari (e.g., Senin, 12 Januari 2025). Tetap pakai DateFormat.
+  String _formatFullDateWithDay(DateTime date) {
+    return DateFormat('EEEE, d MMMM yyyy').format(date);
+  }
+
+  /// Cek apakah tanggal adalah Hari Libur Nasional
+  bool isHoliday(DateTime date) {
+    // Normalisasi tanggal yang diperiksa (mengabaikan waktu)
+    final normalizedDate = DateTime(date.year, date.month, date.day);
+    return _holidays.any((h) => h.isAtSameMomentAs(normalizedDate));
+  }
+
+  /// Predikat untuk showDatePicker: memblokir Sabtu, Minggu, dan Hari Libur
+  bool _isSelectableDay(DateTime day) {
+    // Memblokir Sabtu (6) dan Minggu (7)
+    if (day.weekday == DateTime.saturday || day.weekday == DateTime.sunday) {
+      return false;
+    }
+    // Memblokir Hari Libur Nasional
+    if (isHoliday(day)) {
+      return false;
+    }
+    return true;
+  }
+
+  /// Hitung hari kerja (Senin-Jumat) antara start..end, mengabaikan _holidays dan Sabtu/Minggu.
+  int _hitungHariKerja(DateTime start, DateTime end, List<DateTime> libur) {
+    if (end.isBefore(start)) return 0;
+    int count = 0;
+    DateTime current = DateTime(start.year, start.month, start.day);
+    final last = DateTime(end.year, end.month, end.day);
+    while (!current.isAfter(last)) {
+      if (_isSelectableDay(current)) {
+        count++;
+      }
+      current = current.add(const Duration(days: 1));
+    }
+    return count;
+  }
+
+  // ======================== DATE PICKERS ========================
   Future<void> pickStartDate() async {
     final picked = await showDatePicker(
       context: context,
       initialDate: startDate ?? DateTime.now(),
       firstDate: DateTime(2000),
       lastDate: DateTime(2100),
+      // Menerapkan pembatasan hari
+      selectableDayPredicate: _isSelectableDay,
     );
-    if (picked != null) setState(() => startDate = picked);
+    if (picked != null) {
+      // Normalisasi waktu ke awal hari
+      setState(
+          () => startDate = DateTime(picked.year, picked.month, picked.day));
+    }
   }
 
   Future<void> pickEndDate() async {
+    final init = endDate ?? (startDate ?? DateTime.now());
     final picked = await showDatePicker(
       context: context,
-      initialDate: endDate ?? (startDate ?? DateTime.now()),
+      initialDate: init,
       firstDate: DateTime(2000),
       lastDate: DateTime(2100),
+      // Menerapkan pembatasan hari
+      selectableDayPredicate: _isSelectableDay,
     );
-    if (picked != null) setState(() => endDate = picked);
+    if (picked != null) {
+      // Normalisasi waktu ke awal hari
+      setState(() => endDate = DateTime(picked.year, picked.month, picked.day));
+    }
   }
 
   // ======================== LAMPIRAN ========================
@@ -93,7 +223,12 @@ class _PengajuanCutiPageState extends State<PengajuanCutiPage> {
     });
   }
 
-  // ======================== VALIDASI SEBELUM KONFIRM ========================
+  // ======================== VALIDASI & SUBMIT ========================
+
+  void _showMessage(String msg) {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+  }
+
   bool _validateFormBeforeConfirm() {
     if (alasanController.text.isEmpty) {
       _showMessage("Alasan cuti belum diisi");
@@ -104,21 +239,28 @@ class _PengajuanCutiPageState extends State<PengajuanCutiPage> {
       return false;
     }
     if (endDate!.isBefore(startDate!)) {
-      _showMessage("Tanggal akhir harus setelah tanggal mulai");
+      _showMessage(
+          "Tanggal akhir harus setelah atau sama dengan tanggal mulai");
       return false;
     }
 
-    // Hitung jumlah hari cuti (termasuk hari awal dan akhir)
-    int totalHariCuti = endDate!.difference(startDate!).inDays + 1;
+    // Hitung jumlah hari kerja (termasuk hari awal dan akhir)
+    int totalHariCuti = _hitungHariKerja(startDate!, endDate!, _holidays);
 
-    if (sisaCutiSaatPengajuan == null) {
-      _showMessage("Gagal memuat data sisa cuti");
+    if (totalHariCuti <= 0) {
+      _showMessage(
+          "Tidak ada hari kerja dalam rentang tanggal (mungkin hanya weekend/libur).");
+      return false;
+    }
+
+    if (sisaCutiSaatPengajuan == null || isFetchingCuti) {
+      _showMessage("Gagal memuat data sisa cuti. Coba lagi.");
       return false;
     }
 
     if (totalHariCuti > sisaCutiSaatPengajuan!) {
       _showMessage(
-          "Pengajuan melebihi sisa cuti.\nSisa cuti Anda: $sisaCutiSaatPengajuan hari");
+          "Pengajuan melebihi sisa cuti.\nSisa cuti Anda: ${sisaCutiSaatPengajuan!.toInt()} hari");
       return false;
     }
 
@@ -132,65 +274,157 @@ class _PengajuanCutiPageState extends State<PengajuanCutiPage> {
     }
   }
 
+  Future<bool> submitForm() async {
+    try {
+      String userId = _auth.currentUser?.uid ?? "unknown";
+
+      final int hariCuti = _hitungHariKerja(startDate!, endDate!, _holidays);
+
+      await _cutiService.kirimPengajuan(
+        userId: userId,
+        alasan: alasanController.text,
+        startDate: startDate!,
+        endDate: endDate!,
+        keterangan: keteranganController.text,
+        lampiranBytes: lampiranBytes,
+        fileName: lampiranName,
+        sisaCutiSaatPengajuan: sisaCutiSaatPengajuan,
+      );
+
+      // reset form
+      setState(() {
+        isSubmitted = true;
+        alasanController.clear();
+        keteranganController.clear();
+        startDate = null;
+        endDate = null;
+        lampiranBytes = null;
+        lampiranName = null;
+      });
+
+      await fetchSisaCuti(); // refetch sisa cuti
+      return true;
+    } catch (e) {
+      _showMessage("Gagal mengirim pengajuan: $e");
+      return false;
+    }
+  }
+
+  Future<void> _submitFromDialog() async {
+    setState(() => isLoading = true);
+    final success = await submitForm();
+    setState(() => isLoading = false);
+
+    if (success) {
+      showSuccessDialog();
+    }
+  }
+
+  // ======================== DIALOGS ========================
+
   void _showConfirmDialog() {
-    showDialog(
+    final int hariCuti = _hitungHariKerja(startDate!, endDate!, _holidays);
+    final int sisaNow = sisaCutiSaatPengajuan!.toInt();
+    final int sisaAfter = sisaNow - hariCuti;
+
+    Color sisaColor = sisaAfter <= 0
+        ? Colors.red
+        : (sisaAfter <= 2 ? Colors.orange : Colors.green);
+
+    showGeneralDialog(
+      barrierDismissible: true, // Ubah agar bisa ditutup
+      barrierLabel: "Konfirmasi Cuti",
       context: context,
-      barrierDismissible: false,
-      builder: (dialogContext) {
-        return Dialog(
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(mainAxisSize: MainAxisSize.min, children: [
-              const Text(
-                "Apakah anda yakin untuk mengirim?",
-                textAlign: TextAlign.center,
-                style: TextStyle(fontWeight: FontWeight.bold),
+      transitionDuration: const Duration(milliseconds: 260),
+      pageBuilder: (context, animation, secondaryAnimation) =>
+          const SizedBox.shrink(),
+      transitionBuilder: (context, animation, secondaryAnimation, child) {
+        final curved = Curves.easeOutBack.transform(animation.value);
+        return Opacity(
+          opacity: animation.value,
+          child: Transform.scale(
+            scale: 0.92 + 0.08 * curved,
+            child: Dialog(
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14)),
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: SingleChildScrollView(
+                  child: Column(mainAxisSize: MainAxisSize.min, children: [
+                    const Text(
+                      "Apakah anda yakin untuk mengirim?",
+                      textAlign: TextAlign.center,
+                      style:
+                          TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                    ),
+                    const SizedBox(height: 12),
+
+                    // Detail Tanggal
+                    if (startDate != null && endDate != null) ...[
+                      _buildDetailRow(
+                          "Tanggal mulai:", _formatFullDateWithDay(startDate!)),
+                      const SizedBox(height: 8),
+                      _buildDetailRow(
+                          "Tanggal selesai:", _formatFullDateWithDay(endDate!)),
+                      const SizedBox(height: 12),
+                    ],
+
+                    // Ringkasan Cuti
+                    _buildSummaryRow("Cuti diajukan:", "$hariCuti hari",
+                        isBold: true),
+                    const SizedBox(height: 8),
+                    _buildSummaryRow("Sisa cuti sekarang:", "$sisaNow hari",
+                        isBold: true),
+                    const SizedBox(height: 8),
+                    _buildSummaryRow(
+                        "Sisa setelah pengajuan:", "$sisaAfter hari",
+                        isBold: true, valueColor: sisaColor),
+
+                    const SizedBox(height: 16),
+
+                    // Tombol Ya/Tidak
+                    Row(
+                      children: [
+                        Expanded(
+                          child: ElevatedButton(
+                            onPressed: () async {
+                              Navigator.of(context).pop();
+                              await _submitFromDialog();
+                            },
+                            style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFF1666A9)),
+                            child: const Padding(
+                              padding: EdgeInsets.symmetric(vertical: 12),
+                              child: Text("Ya",
+                                  style: TextStyle(color: Colors.white)),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: ElevatedButton(
+                            onPressed: () => Navigator.of(context).pop(),
+                            style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFFF05454)),
+                            child: const Padding(
+                              padding: EdgeInsets.symmetric(vertical: 12),
+                              child: Text("Tidak",
+                                  style: TextStyle(color: Colors.white)),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ]),
+                ),
               ),
-              const SizedBox(height: 20),
-              Row(
-                children: [
-                  Expanded(
-                    child: ElevatedButton(
-                      onPressed: () {
-                        Navigator.of(dialogContext).pop();
-                        _submitFromButton();
-                      },
-                      style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF1666A9)),
-                      child: const Text("Ya",
-                          style: TextStyle(color: Colors.white)),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: ElevatedButton(
-                      onPressed: () => Navigator.of(dialogContext).pop(),
-                      style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFFF05454)),
-                      child: const Text("Tidak",
-                          style: TextStyle(color: Colors.white)),
-                    ),
-                  ),
-                ],
-              )
-            ]),
+            ),
           ),
         );
       },
     );
   }
 
-  void _submitFromButton() async {
-    setState(() => isLoading = true);
-    final success = await submitForm();
-    setState(() => isLoading = false);
-
-    if (success) showSuccessDialog();
-  }
-
-  // ======================== POPUP SUKSES ========================
   void showSuccessDialog() {
     showDialog(
       context: context,
@@ -250,38 +484,39 @@ class _PengajuanCutiPageState extends State<PengajuanCutiPage> {
     );
   }
 
-  // ======================== KIRIM DATA ========================
-  Future<bool> submitForm() async {
-    try {
-      String userId = _auth.currentUser?.uid ?? "unknown";
+  // ======================== BUILDERS DIALOG ========================
 
-      await _cutiService.kirimPengajuan(
-        userId: userId,
-        alasan: alasanController.text,
-        startDate: startDate!,
-        endDate: endDate!,
-        keterangan: keteranganController.text,
-        lampiranBytes: lampiranBytes,
-        fileName: lampiranName,
-        sisaCutiSaatPengajuan: sisaCutiSaatPengajuan,
-      );
+  Widget _buildDetailRow(String label, String value) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style:
+              TextStyle(fontWeight: FontWeight.w600, color: Colors.grey[700]),
+        ),
+        Text(
+          value,
+          style: const TextStyle(fontWeight: FontWeight.w500),
+        ),
+      ],
+    );
+  }
 
-      // reset form
-      setState(() {
-        isSubmitted = true;
-        alasanController.clear();
-        keteranganController.clear();
-        startDate = null;
-        endDate = null;
-        lampiranBytes = null;
-        lampiranName = null;
-      });
-
-      return true;
-    } catch (e) {
-      _showMessage("Gagal mengirim pengajuan: $e");
-      return false;
-    }
+  Widget _buildSummaryRow(String label, String value,
+      {Color? valueColor, bool isBold = false}) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(label, style: TextStyle(color: Colors.grey[700])),
+        Text(
+          value,
+          style: TextStyle(
+              fontWeight: isBold ? FontWeight.bold : FontWeight.normal,
+              color: valueColor ?? Colors.black),
+        ),
+      ],
+    );
   }
 
   // ======================== UI PAGE ========================
@@ -294,38 +529,6 @@ class _PengajuanCutiPageState extends State<PengajuanCutiPage> {
         children: [
           _buildHeader(),
           _buildTabBar(),
-          if (selectedTab == 0)
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Padding(
-                  padding: const EdgeInsets.only(
-                      top: 8, left: 20, right: 20), // jarak atas 8 saja
-                  child: isFetchingCuti
-                      ? const CircularProgressIndicator()
-                      : Align(
-                          alignment: Alignment.center,
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 12, vertical: 6),
-                            decoration: BoxDecoration(
-                              color: Colors.deepOrange.shade100,
-                              borderRadius: BorderRadius.circular(20),
-                            ),
-                            child: Text(
-                              "Sisa cuti Anda: ${sisaCutiSaatPengajuan!.toInt()} hari",
-                              style: const TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.deepOrange,
-                              ),
-                            ),
-                          ),
-                        ),
-                ),
-                const SizedBox(height: 8), // jarak bawah ke form
-              ],
-            ),
           Expanded(
             child: selectedTab == 0 ? _buildForm() : const RekapanCutiPage(),
           ),
@@ -372,46 +575,38 @@ class _PengajuanCutiPageState extends State<PengajuanCutiPage> {
     );
   }
 
+  // ===== TAB BAR =====
   Widget _buildTabBar() {
     return Transform.translate(
       offset: const Offset(0, -30),
       child: Container(
         height: 55,
-        margin: const EdgeInsets.symmetric(horizontal: 20)
-            .copyWith(bottom: 0),
+        margin: const EdgeInsets.symmetric(horizontal: 20).copyWith(bottom: 0),
         decoration: BoxDecoration(
-          color: Colors.grey.shade200,
-          borderRadius: BorderRadius.circular(40),
-        ),
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            final tabWidth = constraints.maxWidth / 2;
-            return Stack(
-              children: [
-                AnimatedPositioned(
-                  duration: const Duration(milliseconds: 250),
-                  left: selectedTab == 0 ? 0 : tabWidth,
-                  child: Container(
-                    height: 55,
-                    width: tabWidth,
-                    decoration: BoxDecoration(
-                      gradient: const LinearGradient(
-                        colors: [Colors.deepOrange, Colors.redAccent],
-                      ),
-                      borderRadius: BorderRadius.circular(40),
-                    ),
-                  ),
+            color: Colors.grey.shade200,
+            borderRadius: BorderRadius.circular(40)),
+        child: LayoutBuilder(builder: (context, constraints) {
+          final tabWidth = constraints.maxWidth / 2;
+          return Stack(children: [
+            AnimatedPositioned(
+              duration: const Duration(milliseconds: 250),
+              left: selectedTab == 0 ? 0 : tabWidth,
+              child: Container(
+                height: 55,
+                width: tabWidth,
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                      colors: [Colors.deepOrange, Colors.redAccent]),
+                  borderRadius: BorderRadius.circular(40),
                 ),
-                Row(
-                  children: [
-                    _tabButton("Pengajuan", 0),
-                    _tabButton("Rekapan", 1),
-                  ],
-                )
-              ],
-            );
-          },
-        ),
+              ),
+            ),
+            Row(children: [
+              _tabButton("Pengajuan", 0),
+              _tabButton("Rekapan", 1)
+            ])
+          ]);
+        }),
       ),
     );
   }
@@ -424,155 +619,80 @@ class _PengajuanCutiPageState extends State<PengajuanCutiPage> {
           child: Text(
             title,
             style: TextStyle(
-              color: selectedTab == index ? Colors.white : Colors.grey.shade700,
-              fontWeight: FontWeight.w600,
-            ),
+                color:
+                    selectedTab == index ? Colors.white : Colors.grey.shade700,
+                fontWeight: FontWeight.w600),
           ),
         ),
       ),
     );
   }
 
-  // ===== FORM =====
+  // ===== FORM CONTENT =====
   Widget _buildForm() {
     return SingleChildScrollView(
       padding: const EdgeInsets.symmetric(horizontal: 20),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        const Text("Alasan Cuti",
-            style: TextStyle(
-                color: Color(0xFF7F7F7F), fontWeight: FontWeight.w600)),
+        const SizedBox(height: 12),
+        _buildSectionTitle("Alasan Cuti"),
         const SizedBox(height: 8),
-        Container(
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: const Color(0xFFF3F7F7),
-            borderRadius: BorderRadius.circular(10),
-          ),
-          child: TextField(
-            controller: alasanController,
-            decoration: const InputDecoration(
-                hintText: "Tulis alasan cuti...", border: InputBorder.none),
-          ),
-        ),
+        _buildTextField(alasanController, "Tulis alasan cuti...", maxLines: 1),
         const SizedBox(height: 25),
-        const Text("Tanggal",
-            style: TextStyle(
-                color: Color(0xFF7F7F7F), fontWeight: FontWeight.w600)),
+        _buildSectionTitle("Tanggal"),
         const SizedBox(height: 8),
-        Row(
-          children: [
-            Expanded(
+        Row(children: [
+          Expanded(
               child: GestureDetector(
-                onTap: pickStartDate,
-                child: _dateBox(startDate == null
-                    ? "Pilih Tanggal"
-                    : "${startDate!.day} ${_monthName(startDate!.month)} ${startDate!.year}"),
-              ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
+                  onTap: pickStartDate,
+                  // Menggunakan _formatFullDate
+                  child: _dateBox(startDate == null
+                      ? "Pilih Tanggal Mulai"
+                      : _formatFullDate(startDate!)))),
+          const SizedBox(width: 10),
+          Expanded(
               child: GestureDetector(
-                onTap: pickEndDate,
-                child: _dateBox(endDate == null
-                    ? "Pilih Tanggal"
-                    : "${endDate!.day} ${_monthName(endDate!.month)} ${endDate!.year}"),
-              ),
-            ),
-          ],
-        ),
+                  onTap: pickEndDate,
+                  // Menggunakan _formatFullDate
+                  child: _dateBox(endDate == null
+                      ? "Pilih Tanggal Selesai"
+                      : _formatFullDate(endDate!)))),
+        ]),
         const SizedBox(height: 25),
-        const Text("Lampiran (Opsional)",
-            style: TextStyle(
-                color: Color(0xFF7F7F7F), fontWeight: FontWeight.w600)),
+        _buildSectionTitle("Lampiran (Opsional)"),
         const SizedBox(height: 8),
-        GestureDetector(
-          onTap: pickLampiran,
-          child: Container(
-            padding: const EdgeInsets.symmetric(vertical: 14),
-            decoration: BoxDecoration(
-              color: Colors.deepOrange,
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: const Center(
-              child: Text("Upload Lampiran",
-                  style: TextStyle(
-                      color: Colors.white, fontWeight: FontWeight.w600)),
-            ),
-          ),
-        ),
+        _buildUploadButton(),
         const SizedBox(height: 10),
-        if (lampiranBytes != null)
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-            decoration: BoxDecoration(
-              color: const Color(0xFFF3F7F7),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Row(
-              children: [
-                const Icon(Icons.insert_drive_file,
-                    size: 22, color: Colors.black54),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    lampiranName ?? "Lampiran",
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontWeight: FontWeight.w600),
-                  ),
-                ),
-                GestureDetector(
-                  onTap: removeLampiran,
-                  child: const Icon(Icons.close, color: Colors.black54),
-                ),
-              ],
-            ),
-          ),
+        if (lampiranBytes != null) _buildFileAttachment(),
         const SizedBox(height: 20),
-        const Text("Keterangan (Opsional)",
-            style: TextStyle(
-                color: Color(0xFF7F7F7F), fontWeight: FontWeight.w600)),
+        _buildSectionTitle("Keterangan (Opsional)"),
         const SizedBox(height: 8),
-        Container(
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: const Color(0xFFF3F7F7),
-            borderRadius: BorderRadius.circular(10),
-          ),
-          child: TextField(
-            controller: keteranganController,
-            maxLines: 4,
-            decoration: const InputDecoration(
-                hintText: "Tulis keterangan...", border: InputBorder.none),
-          ),
-        ),
+        _buildTextField(keteranganController, "Tulis keterangan...",
+            maxLines: 4),
         const SizedBox(height: 25),
-        GestureDetector(
-          onTap: (isSubmitted) ? null : _onKirimPressed,
-          child: Container(
-            padding: const EdgeInsets.symmetric(vertical: 14),
-            decoration: BoxDecoration(
-              color:
-                  isSubmitted ? Colors.blue.shade300 : const Color(0xFF2B3541),
-              borderRadius: BorderRadius.circular(25),
-            ),
-            child: Center(
-              child: isLoading
-                  ? const SizedBox(
-                      height: 18,
-                      width: 18,
-                      child: CircularProgressIndicator(
-                          strokeWidth: 2, color: Colors.white),
-                    )
-                  : Text(
-                      isSubmitted ? "Sudah Terkirim" : "Kirim",
-                      style: const TextStyle(
-                          color: Colors.white, fontWeight: FontWeight.w700),
-                    ),
-            ),
-          ),
-        ),
+        _buildSubmitButton(),
         const SizedBox(height: 40),
       ]),
+    );
+  }
+
+  Widget _buildSectionTitle(String title) {
+    return Text(title,
+        style: const TextStyle(
+            color: Color(0xFF7F7F7F), fontWeight: FontWeight.w600));
+  }
+
+  Widget _buildTextField(TextEditingController controller, String hint,
+      {int maxLines = 1}) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      decoration: BoxDecoration(
+          color: const Color(0xFFF3F7F7),
+          borderRadius: BorderRadius.circular(10)),
+      child: TextField(
+          controller: controller,
+          maxLines: maxLines,
+          decoration:
+              InputDecoration(hintText: hint, border: InputBorder.none)),
     );
   }
 
@@ -580,34 +700,75 @@ class _PengajuanCutiPageState extends State<PengajuanCutiPage> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
-        color: const Color(0xFFF3F7F7),
-        borderRadius: BorderRadius.circular(10),
-      ),
-      child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [Text(text), const Icon(Icons.calendar_today, size: 18)]),
+          color: const Color(0xFFF3F7F7),
+          borderRadius: BorderRadius.circular(10)),
+      child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+        Expanded(child: Text(text, overflow: TextOverflow.ellipsis)),
+        const Icon(Icons.calendar_today, size: 18)
+      ]),
     );
   }
 
-  String _monthName(int m) {
-    const b = [
-      "Januari",
-      "Februari",
-      "Maret",
-      "April",
-      "Mei",
-      "Juni",
-      "Juli",
-      "Agustus",
-      "September",
-      "Oktober",
-      "November",
-      "Desember"
-    ];
-    return b[m - 1];
+  Widget _buildUploadButton() {
+    return GestureDetector(
+      onTap: pickLampiran,
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 14),
+        decoration: BoxDecoration(
+            color: Colors.deepOrange, borderRadius: BorderRadius.circular(10)),
+        child: const Center(
+            child: Text("Upload Lampiran",
+                style: TextStyle(
+                    color: Colors.white, fontWeight: FontWeight.w600))),
+      ),
+    );
   }
 
-  void _showMessage(String msg) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+  Widget _buildFileAttachment() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+          color: const Color(0xFFF3F7F7),
+          borderRadius: BorderRadius.circular(10)),
+      child: Row(children: [
+        const Icon(Icons.insert_drive_file, size: 22, color: Colors.black54),
+        const SizedBox(width: 10),
+        Expanded(
+            child: Text(lampiranName ?? "Lampiran",
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontWeight: FontWeight.w600))),
+        GestureDetector(
+            onTap: removeLampiran,
+            child: const Icon(Icons.close, color: Colors.black54)),
+      ]),
+    );
+  }
+
+  Widget _buildSubmitButton() {
+    return GestureDetector(
+      onTap: (isSubmitted || isFetchingCuti) ? null : _onKirimPressed,
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 14),
+        decoration: BoxDecoration(
+            color: (isSubmitted || isFetchingCuti)
+                ? Colors.blue.shade300
+                : const Color(0xFF2B3541),
+            borderRadius: BorderRadius.circular(25)),
+        child: Center(
+          child: isLoading
+              ? const SizedBox(
+                  height: 18,
+                  width: 18,
+                  child: CircularProgressIndicator(
+                      strokeWidth: 2, color: Colors.white))
+              : Text(
+                  isSubmitted
+                      ? "Sudah Terkirim"
+                      : (isFetchingCuti ? "Memuat..." : "Kirim"),
+                  style: const TextStyle(
+                      color: Colors.white, fontWeight: FontWeight.w700)),
+        ),
+      ),
+    );
   }
 }

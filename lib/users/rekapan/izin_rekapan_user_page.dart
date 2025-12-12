@@ -4,7 +4,11 @@ import 'package:firebase_auth/firebase_auth.dart';
 import '../../../services/izin_service.dart';
 import 'package:universal_html/html.dart' as html;
 import 'package:flutter/foundation.dart' show kIsWeb;
-import 'package:url_launcher/url_launcher.dart';
+import 'package:http/http.dart' as http;
+import 'package:open_file/open_file.dart';
+import 'package:path_provider/path_provider.dart';
+import 'dart:io';
+import 'package:languo/users/pengajuan/izin_pengajuan_page.dart';
 
 class IzinRekapanData {
   final String id;
@@ -277,16 +281,36 @@ class _RekapanIzinPageState extends State<RekapanIzinPage> {
     );
   }
 
-  Future<void> openPdf(String url, BuildContext context) async {
-    if (kIsWeb) {
-      html.window.open(url, '_blank');
-    } else {
-      final Uri uri = Uri.parse(url);
-      if (await canLaunchUrl(uri)) {
-        await launchUrl(uri, mode: LaunchMode.externalApplication);
-      } else {
-        _showMessage('Gagal membuka lampiran: URL tidak valid');
+  Future<void> _openPdf(String url) async {
+    try {
+      // === Jika Web ===
+      if (kIsWeb) {
+        html.window.open(url, '_blank');
+        return;
       }
+
+      // === Jika Android/iOS ===
+      final uri = Uri.parse(url);
+      final response = await http.get(uri);
+
+      if (response.statusCode == 200) {
+        final bytes = response.bodyBytes;
+
+        // Simpan sementara di device
+        final tempDir = await getTemporaryDirectory();
+        final filePath = "${tempDir.path}/lampiran.pdf";
+
+        final file = File(filePath);
+        await file.writeAsBytes(bytes);
+
+        // Buka file menggunakan aplikasi di HP
+        await OpenFile.open(filePath);
+      } else {
+        _showMessage(
+            "Gagal mengunduh lampiran (status: ${response.statusCode}).");
+      }
+    } catch (e) {
+      _showMessage("Terjadi kesalahan saat membuka PDF.");
     }
   }
 
@@ -300,11 +324,11 @@ class _RekapanIzinPageState extends State<RekapanIzinPage> {
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
         decoration: BoxDecoration(
             color: color, borderRadius: BorderRadius.circular(20)),
-        child: Text(status,
-            style: const TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.bold,
-                fontSize: 12)),
+        child: Text(
+          status,
+          style: const TextStyle(
+              color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12),
+        ),
       );
     }
 
@@ -312,95 +336,108 @@ class _RekapanIzinPageState extends State<RekapanIzinPage> {
       elevation: 4,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       margin: EdgeInsets.zero,
-      child: Theme(
-        data: Theme.of(context).copyWith(
-            splashColor: Colors.transparent,
-            highlightColor: Colors.transparent),
-        child: ExpansionTile(
-          tilePadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          title: Text(izin.perihal,
-              style: const TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 16,
-                  color: Color(0xFF2B3541))),
-          subtitle: Padding(
-            padding: const EdgeInsets.only(top: 4.0),
-            child: Row(children: [
-              const Icon(Icons.calendar_month, size: 16, color: Colors.grey),
-              const SizedBox(width: 6),
-              Expanded(
-                  child: Text("Periode: $periodeIzin",
-                      style: const TextStyle(
-                          fontSize: 13, color: Colors.black87))),
-            ]),
-          ),
-          trailing: Row(mainAxisSize: MainAxisSize.min, children: [
-            if (izin.lampiranUrl != null && izin.lampiranUrl!.isNotEmpty)
-              const Padding(
-                  padding: EdgeInsets.only(right: 8.0),
-                  child: Icon(Icons.attachment,
-                      color: Colors.deepOrange, size: 20)),
-            statusBadge(izin.status, _statusColor(izin.status)),
-            const SizedBox(width: 4),
-            const Icon(Icons.arrow_drop_down, color: Colors.grey),
-          ]),
-          children: [
-            const Divider(height: 1, thickness: 1, indent: 16, endIndent: 16),
-            Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _buildDetailRow("Nama", izin.userName),
-                    _buildDetailRow("Email", izin.userEmail),
-                    _buildDetailRow("Jabatan", izin.userRole),
-                    const SizedBox(height: 12),
-                    _buildDetailRow("tanggal Pengajuan",
-                        _formatTanggal(izin.tanggalPengajuan)),
-                    _buildDetailRow("Status", izin.status,
-                        isStatus: true, statusColor: _statusColor(izin.status)),
-                    _buildDetailRow("Keterangan",
-                        izin.keterangan.isEmpty ? "-" : izin.keterangan),
-                    if (izin.lampiranUrl != null &&
-                        izin.lampiranUrl!.isNotEmpty)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 15.0),
-                        child: ElevatedButton.icon(
-                          onPressed: () => openPdf(izin.lampiranUrl!, context),
-                          icon: const Icon(Icons.file_download,
-                              size: 20, color: Colors.white),
-                          label: const Text("Lihat Lampiran",
-                              style: TextStyle(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.w600)),
-                          style: ElevatedButton.styleFrom(
-                              backgroundColor: const Color(0xFF1666A9),
-                              minimumSize: const Size(double.infinity, 40),
-                              shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(8))),
-                        ),
-                      ),
-                    if (canDelete)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 10.0),
-                        child: OutlinedButton.icon(
-                          onPressed: () => _showConfirmDeleteDialog(izin.id),
-                          icon: const Icon(Icons.delete_forever,
-                              color: Colors.red, size: 20),
-                          label: const Text("Hapus Pengajuan",
-                              style: TextStyle(
-                                  color: Colors.red,
-                                  fontWeight: FontWeight.w600)),
-                          style: OutlinedButton.styleFrom(
-                              side: const BorderSide(color: Colors.red),
-                              minimumSize: const Size(double.infinity, 40),
-                              shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(8))),
-                        ),
-                      ),
-                  ]),
+      child: InkWell(
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => const PengajuanIzinPage(initialTab: 1),
             ),
-          ],
+          );
+        },
+        child: Theme(
+          data: Theme.of(context).copyWith(
+              splashColor: Colors.transparent,
+              highlightColor: Colors.transparent),
+          child: ExpansionTile(
+            tilePadding:
+                const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            title: Text(izin.perihal,
+                style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                    color: Color(0xFF2B3541))),
+            subtitle: Padding(
+              padding: const EdgeInsets.only(top: 4.0),
+              child: Row(children: [
+                const Icon(Icons.calendar_month, size: 16, color: Colors.grey),
+                const SizedBox(width: 6),
+                Expanded(
+                    child: Text("Periode: $periodeIzin",
+                        style: const TextStyle(
+                            fontSize: 13, color: Colors.black87))),
+              ]),
+            ),
+            trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+              if (izin.lampiranUrl != null && izin.lampiranUrl!.isNotEmpty)
+                const Padding(
+                    padding: EdgeInsets.only(right: 8.0),
+                    child: Icon(Icons.attachment,
+                        color: Colors.deepOrange, size: 20)),
+              statusBadge(izin.status, _statusColor(izin.status)),
+              const SizedBox(width: 4),
+              const Icon(Icons.arrow_drop_down, color: Colors.grey),
+            ]),
+            children: [
+              const Divider(height: 1, thickness: 1, indent: 16, endIndent: 16),
+              Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _buildDetailRow("Nama", izin.userName),
+                      _buildDetailRow("Email", izin.userEmail),
+                      _buildDetailRow("Jabatan", izin.userRole),
+                      const SizedBox(height: 12),
+                      _buildDetailRow("Tanggal Pengajuan",
+                          _formatTanggal(izin.tanggalPengajuan)),
+                      _buildDetailRow("Status", izin.status,
+                          isStatus: true,
+                          statusColor: _statusColor(izin.status)),
+                      _buildDetailRow("Keterangan",
+                          izin.keterangan.isEmpty ? "-" : izin.keterangan),
+                      if (izin.lampiranUrl != null &&
+                          izin.lampiranUrl!.isNotEmpty)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 15.0),
+                          child: ElevatedButton.icon(
+                            onPressed: () =>
+                                _openPdf(izin.lampiranUrl!),
+                            icon: const Icon(Icons.file_download,
+                                size: 20, color: Colors.white),
+                            label: const Text("Lihat Lampiran",
+                                style: TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.w600)),
+                            style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFF1666A9),
+                                minimumSize: const Size(double.infinity, 40),
+                                shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(8))),
+                          ),
+                        ),
+                      if (canDelete)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 10.0),
+                          child: OutlinedButton.icon(
+                            onPressed: () => _showConfirmDeleteDialog(izin.id),
+                            icon: const Icon(Icons.delete_forever,
+                                color: Colors.red, size: 20),
+                            label: const Text("Hapus Pengajuan",
+                                style: TextStyle(
+                                    color: Colors.red,
+                                    fontWeight: FontWeight.w600)),
+                            style: OutlinedButton.styleFrom(
+                                side: const BorderSide(color: Colors.red),
+                                minimumSize: const Size(double.infinity, 40),
+                                shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(8))),
+                          ),
+                        ),
+                    ]),
+              ),
+            ],
+          ),
         ),
       ),
     );

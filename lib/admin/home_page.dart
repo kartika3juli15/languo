@@ -7,13 +7,14 @@ import 'package:languo/admin/pengajuan/cuti_pengajuan_role_page.dart';
 import 'package:languo/admin/pengajuan/izin_pengajuan_role_page.dart';
 import '../models/user_model.dart';
 import '../profile/profile_page.dart';
-import 'rekapan/cuti_rekapan_admin_page.dart';
 import 'rekapan/izin_rekapan_admin_page.dart';
 import 'rekapan/sakit_rekapan_admin_page.dart';
 import 'rekapan/kehadiran_rekapan_admin_page.dart';
 import 'tambah_jadwal.dart';
 import 'package:intl/intl.dart';
 import 'package:languo/admin/user_management_page.dart';
+import 'dart:ui' as ui;
+import 'dart:math' as math;
 
 class HomeAdmin extends StatefulWidget {
   const HomeAdmin({super.key});
@@ -24,6 +25,318 @@ class HomeAdmin extends StatefulWidget {
 
 class _HomeAdminState extends State<HomeAdmin> {
   String? _lastScannedData;
+  Map<String, int> _statistikData = {
+    'tepatWaktu': 0,
+    'terlambat': 0,
+    'izin': 0,
+    'sakit': 0,
+    'cuti': 0,
+    'kehadiran': 0,
+  };
+  bool _isLoadingStats = true;
+  String _selectedRole = 'dosen'; // Default dosen
+
+  @override
+  void initState() {
+    super.initState();
+    _loadStatistikData();
+  }
+
+  Future<void> _loadStatistikData() async {
+    setState(() => _isLoadingStats = true);
+
+    try {
+      int tepatWaktu = 0;
+      int terlambat = 0;
+      int kehadiran = 0;
+      int izin = 0;
+      int sakit = 0;
+      int cuti = 0;
+
+      debugPrint('=== LOADING STATISTIK untuk $_selectedRole ===');
+
+      // 1. Hitung data absensi berdasarkan role
+      final absensiSnapshot = await FirebaseFirestore.instance
+          .collection('absensi')
+          .get();
+
+      debugPrint('Total dokumen absensi: ${absensiSnapshot.docs.length}');
+
+      for (var doc in absensiSnapshot.docs) {
+        final data = doc.data();
+        
+        debugPrint('--- Processing absensi doc: ${doc.id} ---');
+        debugPrint('Raw data: $data');
+        
+        // Coba ambil user_id dengan berbagai kemungkinan
+        final userIdRaw = data['user_id'];
+        debugPrint('user_id raw type: ${userIdRaw.runtimeType}');
+        debugPrint('user_id raw value: "$userIdRaw"');
+        
+        String userId = '';
+        if (userIdRaw is int) {
+          userId = userIdRaw.toString();
+        } else if (userIdRaw is String) {
+          userId = userIdRaw;
+        } else {
+          userId = userIdRaw?.toString() ?? '';
+        }
+        
+        debugPrint('user_id setelah konversi: "$userId"');
+        
+        if (userId.isEmpty) {
+          debugPrint('Skip: user_id kosong');
+          continue;
+        }
+
+        // Cek role user berdasarkan user_id
+        final userRole = await _getUserRoleByUserId(userId);
+        
+        debugPrint('Role yang ditemukan: $userRole, Filter: $_selectedRole');
+        
+        if (userRole == null) {
+          debugPrint('❌ User $userId tidak ditemukan di collection manapun');
+          continue;
+        }
+        
+        if (userRole != _selectedRole) {
+          debugPrint('Skip: role=$userRole, filter=$_selectedRole');
+          continue;
+        }
+
+        // Ambil check_in_time dan check_out_time (Timestamp dari Firestore)
+        final checkInTimestamp = data['check_in_time'] as Timestamp?;
+        final checkOutTimestamp = data['check_out_time'] as Timestamp?;
+
+        debugPrint('check_in_time: $checkInTimestamp');
+        debugPrint('check_out_time: $checkOutTimestamp');
+
+        if (checkInTimestamp == null || checkOutTimestamp == null) {
+          debugPrint('Skip: check_in_time atau check_out_time null');
+          continue;
+        }
+
+        final checkInTime = checkInTimestamp.toDate();
+        final checkOutTime = checkOutTimestamp.toDate();
+
+        // Hitung kehadiran (yang sudah check in DAN check out)
+        kehadiran++;
+        debugPrint('✓ Kehadiran++ untuk user $userId: Total = $kehadiran');
+
+        // Hitung tepat waktu vs terlambat (berdasarkan jam check in)
+        try {
+          final hour = checkInTime.hour;
+          final minute = checkInTime.minute;
+
+          debugPrint('Check in time: ${hour.toString().padLeft(2, '0')}:${minute.toString().padLeft(2, '0')}');
+
+          // Tepat waktu jika sebelum atau sama dengan 07:30
+          if (hour < 7 || (hour == 7 && minute <= 30)) {
+            tepatWaktu++;
+            debugPrint('✓ Tepat Waktu: Total = $tepatWaktu');
+          } else {
+            terlambat++;
+            debugPrint('✓ Terlambat: Total = $terlambat');
+          }
+        } catch (e) {
+          debugPrint('Error parsing time: $e');
+        }
+      }
+
+      debugPrint('Hasil Absensi: Kehadiran=$kehadiran, Tepat Waktu=$tepatWaktu, Terlambat=$terlambat');
+
+      // 2. Hitung izin yang disetujui
+      debugPrint('--- Mengecek Izin ---');
+      final izinSnapshot = await FirebaseFirestore.instance
+          .collection('pengajuan_izin')
+          .where('status', isEqualTo: 'Disetujui')
+          .get();
+
+      debugPrint('Total izin dengan status Disetujui: ${izinSnapshot.docs.length}');
+
+      for (var doc in izinSnapshot.docs) {
+        final data = doc.data();
+        var userRole = (data['user_role'] ?? '').toString().trim();
+        final userName = data['user_name'] ?? '';
+        
+        // Normalisasi role ke lowercase
+        userRole = userRole.toLowerCase();
+        
+        debugPrint('Izin - User: $userName, Role: "$userRole", Filter: "$_selectedRole"');
+        
+        if (userRole == _selectedRole) {
+          izin++;
+          debugPrint('✓ Izin MATCH! Total: $izin');
+        } else {
+          debugPrint('✗ Izin TIDAK MATCH (role tidak sama)');
+        }
+      }
+
+      // 3. Hitung sakit yang disetujui
+      debugPrint('--- Mengecek Sakit ---');
+      final sakitSnapshot = await FirebaseFirestore.instance
+          .collection('pengajuan_sakit')
+          .where('status', isEqualTo: 'Disetujui')
+          .get();
+
+      debugPrint('Total sakit dengan status Disetujui: ${sakitSnapshot.docs.length}');
+
+      for (var doc in sakitSnapshot.docs) {
+        final data = doc.data();
+        var userRole = (data['user_role'] ?? '').toString().trim();
+        final userName = data['user_name'] ?? '';
+        
+        // Normalisasi role ke lowercase
+        userRole = userRole.toLowerCase();
+        
+        debugPrint('Sakit - User: $userName, Role: "$userRole", Filter: "$_selectedRole"');
+        
+        if (userRole == _selectedRole) {
+          sakit++;
+          debugPrint('✓ Sakit MATCH! Total: $sakit');
+        } else {
+          debugPrint('✗ Sakit TIDAK MATCH (role tidak sama)');
+        }
+      }
+
+      // 4. Hitung cuti yang disetujui
+      debugPrint('--- Mengecek Cuti ---');
+      final cutiSnapshot = await FirebaseFirestore.instance
+          .collection('pengajuan_cuti')
+          .where('status', isEqualTo: 'Disetujui')
+          .get();
+
+      debugPrint('Total cuti dengan status Disetujui: ${cutiSnapshot.docs.length}');
+
+      for (var doc in cutiSnapshot.docs) {
+        final data = doc.data();
+        var userRole = (data['user_role'] ?? '').toString().trim();
+        final userName = data['user_name'] ?? '';
+        
+        // Normalisasi role ke lowercase
+        userRole = userRole.toLowerCase();
+        
+        debugPrint('Cuti - User: $userName, Role: "$userRole", Filter: "$_selectedRole"');
+        
+        if (userRole == _selectedRole) {
+          cuti++;
+          debugPrint('✓ Cuti MATCH! Total: $cuti');
+        } else {
+          debugPrint('✗ Cuti TIDAK MATCH (role tidak sama)');
+        }
+      }
+
+      debugPrint('=== HASIL AKHIR STATISTIK ($_selectedRole) ===');
+      debugPrint('Kehadiran: $kehadiran');
+      debugPrint('Tepat Waktu: $tepatWaktu');
+      debugPrint('Terlambat: $terlambat');
+      debugPrint('Izin: $izin');
+      debugPrint('Sakit: $sakit');
+      debugPrint('Cuti: $cuti');
+
+      setState(() {
+        _statistikData = {
+          'tepatWaktu': tepatWaktu,
+          'terlambat': terlambat,
+          'izin': izin,
+          'sakit': sakit,
+          'cuti': cuti,
+          'kehadiran': kehadiran,
+        };
+        _isLoadingStats = false;
+      });
+    } catch (e) {
+      debugPrint('❌ Error loading statistik: $e');
+      setState(() => _isLoadingStats = false);
+    }
+  }
+
+  // Fungsi untuk mendapatkan role berdasarkan user_id (menggunakan document ID)
+  Future<String?> _getUserRoleByUserId(String userId) async {
+    try {
+      // Cek di collection dosen berdasarkan document ID
+      var doc = await FirebaseFirestore.instance
+          .collection('dosen')
+          .doc(userId)
+          .get();
+      if (doc.exists) {
+        debugPrint('✓ User $userId ditemukan di collection DOSEN');
+        return 'dosen';
+      }
+
+      // Cek di collection karyawan berdasarkan document ID
+      doc = await FirebaseFirestore.instance
+          .collection('karyawan')
+          .doc(userId)
+          .get();
+      if (doc.exists) {
+        debugPrint('✓ User $userId ditemukan di collection KARYAWAN');
+        return 'karyawan';
+      }
+
+      // Cek di collection users berdasarkan document ID (fallback)
+      doc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(userId)
+          .get();
+      if (doc.exists) {
+        final data = doc.data() as Map<String, dynamic>;
+        final role = (data['user_role'] ?? 'karyawan').toString().toLowerCase();
+        debugPrint('✓ User $userId ditemukan di collection USERS dengan role: $role');
+        return role;
+      }
+
+      debugPrint('✗ User $userId TIDAK DITEMUKAN di collection manapun');
+      return null;
+    } catch (e) {
+      debugPrint('❌ Error getting user role for $userId: $e');
+      return null;
+    }
+  }
+
+  Future<String?> _getUserRole(String userId) async {
+    if (userId.isEmpty) return null;
+
+    try {
+      // Cek di collection dosen
+      var doc = await FirebaseFirestore.instance
+          .collection('dosen')
+          .doc(userId)
+          .get();
+      if (doc.exists) {
+        debugPrint('✓ User $userId ditemukan di collection DOSEN');
+        return 'dosen';
+      }
+
+      // Cek di collection karyawan
+      doc = await FirebaseFirestore.instance
+          .collection('karyawan')
+          .doc(userId)
+          .get();
+      if (doc.exists) {
+        debugPrint('✓ User $userId ditemukan di collection KARYAWAN');
+        return 'karyawan';
+      }
+
+      // Cek di collection users
+      doc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(userId)
+          .get();
+      if (doc.exists) {
+        final data = doc.data() as Map<String, dynamic>;
+        final role = (data['user_role'] ?? 'karyawan').toString().toLowerCase();
+        debugPrint('✓ User $userId ditemukan di collection USERS dengan role: $role');
+        return role;
+      }
+
+      debugPrint('✗ User $userId TIDAK DITEMUKAN di collection manapun');
+      return null;
+    } catch (e) {
+      debugPrint('❌ Error getting user role for $userId: $e');
+      return null;
+    }
+  }
 
   Future<UserModel?> getUserData() async {
     final user = FirebaseAuth.instance.currentUser;
@@ -39,48 +352,185 @@ class _HomeAdminState extends State<HomeAdmin> {
     return UserModel.fromFirestore(doc);
   }
 
+  void _showRoleFilterDialog() {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return Dialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: Container(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text(
+                  'Pilih Role',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 20),
+                ListTile(
+                  leading: Radio<String>(
+                    value: 'dosen',
+                    groupValue: _selectedRole,
+                    onChanged: (value) {
+                      setState(() => _selectedRole = value!);
+                      Navigator.pop(context);
+                      _loadStatistikData();
+                    },
+                  ),
+                  title: const Text('Dosen'),
+                  onTap: () {
+                    setState(() => _selectedRole = 'dosen');
+                    Navigator.pop(context);
+                    _loadStatistikData();
+                  },
+                ),
+                ListTile(
+                  leading: Radio<String>(
+                    value: 'karyawan',
+                    groupValue: _selectedRole,
+                    onChanged: (value) {
+                      setState(() => _selectedRole = value!);
+                      Navigator.pop(context);
+                      _loadStatistikData();
+                    },
+                  ),
+                  title: const Text('Karyawan'),
+                  onTap: () {
+                    setState(() => _selectedRole = 'karyawan');
+                    Navigator.pop(context);
+                    _loadStatistikData();
+                  },
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.grey[100],
       bottomNavigationBar: _buildBottomNav(),
       body: SafeArea(
-        child: SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _buildHeader(),
-              _buildScheduleCard(),
-              const SizedBox(height: 20),
-              if (_lastScannedData != null) _buildScanResultInfo(),
-              Padding(
-                padding: const EdgeInsets.only(bottom: 20),
-                child: _buildMenuButtons(),
-              ),
-              const SizedBox(height: 40),
-              _buildAktivitasChart(),
-              const SizedBox(height: 20),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: Text(
-                  "Detail",
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+        child: RefreshIndicator(
+          onRefresh: _loadStatistikData,
+          child: SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildHeader(),
+                _buildScheduleCard(),
+                const SizedBox(height: 20),
+                if (_lastScannedData != null) _buildScanResultInfo(),
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 20),
+                  child: _buildMenuButtons(),
                 ),
-              ),
-              const SizedBox(height: 10),
-              _buildDetailBar(
-                  title: "Tepat Waktu", value: 0.655, color: Color(0xFF2196F3)),
-              _buildDetailBar(
-                  title: "Terlambat", value: 0.165, color: Color(0xFFFFA500)),
-              _buildDetailBar(
-                  title: "Izin", value: 0.062, color: Color(0xFFFFD700)),
-              _buildDetailBar(
-                  title: "Sakit", value: 0.125, color: Color(0xFF4CAF50)),
-              const SizedBox(height: 20),
-            ],
+                const SizedBox(height: 40),
+                _buildAktivitasChart(),
+                const SizedBox(height: 20),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: Text(
+                    "Detail",
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                _buildDetailSection(),
+                const SizedBox(height: 20),
+              ],
+            ),
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildDetailSection() {
+    if (_isLoadingStats) {
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.all(20),
+          child: CircularProgressIndicator(),
+        ),
+      );
+    }
+
+    final total = _statistikData['kehadiran']! +
+        _statistikData['tepatWaktu']! +
+        _statistikData['terlambat']! +
+        _statistikData['izin']! +
+        _statistikData['sakit']! +
+        _statistikData['cuti']!;
+
+    if (total == 0) {
+      return Padding(
+        padding: const EdgeInsets.all(20),
+        child: Center(
+          child: Column(
+            children: [
+              Icon(Icons.analytics_outlined, size: 48, color: Colors.grey[400]),
+              const SizedBox(height: 8),
+              Text(
+                'Belum ada data untuk ${_selectedRole == 'dosen' ? 'Dosen' : 'Karyawan'}',
+                style: TextStyle(color: Colors.grey[600]),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return Column(
+      children: [
+        _buildDetailBar(
+          title: "Kehadiran",
+          value: _statistikData['kehadiran']! / total,
+          count: _statistikData['kehadiran']!,
+          color: const Color(0xFF5B9BD5),
+        ),
+        _buildDetailBar(
+          title: "Tepat Waktu",
+          value: _statistikData['tepatWaktu']! / total,
+          count: _statistikData['tepatWaktu']!,
+          color: const Color(0xFF4CAF50),
+        ),
+        _buildDetailBar(
+          title: "Terlambat",
+          value: _statistikData['terlambat']! / total,
+          count: _statistikData['terlambat']!,
+          color: const Color(0xFFFFA500),
+        ),
+        _buildDetailBar(
+          title: "Izin",
+          value: _statistikData['izin']! / total,
+          count: _statistikData['izin']!,
+          color: const Color(0xFFFFD966),
+        ),
+        _buildDetailBar(
+          title: "Sakit",
+          value: _statistikData['sakit']! / total,
+          count: _statistikData['sakit']!,
+          color: const Color(0xFFFF6B6B),
+        ),
+        _buildDetailBar(
+          title: "Cuti",
+          value: _statistikData['cuti']! / total,
+          count: _statistikData['cuti']!,
+          color: const Color(0xFF9C27B0),
+        ),
+      ],
     );
   }
 
@@ -168,8 +618,6 @@ class _HomeAdminState extends State<HomeAdmin> {
             ],
           ),
         ),
-
-        // Floating Add Button
         Positioned(
           top: -20,
           child: GestureDetector(
@@ -308,7 +756,7 @@ class _HomeAdminState extends State<HomeAdmin> {
     );
   }
 
-  // ===================== Menu Buttons (Kotak + Icon Bulat) =====================
+  // ===================== Menu Buttons =====================
   Widget _buildMenuButtons() {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -435,7 +883,7 @@ class _HomeAdminState extends State<HomeAdmin> {
                         builder: (_) => const UserManagementPage()),
                   );
                 },
-                icon: const Icon(Icons.add, size: 20), // ikon + di kiri
+                icon: const Icon(Icons.add, size: 20),
                 label: const Text(
                   "Manajemen User",
                   style: TextStyle(
@@ -467,14 +915,25 @@ class _HomeAdminState extends State<HomeAdmin> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            "Aktivitas Keseluruhan",
-            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                "Aktivitas keseluruhan",
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+              if (_isLoadingStats)
+                SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+            ],
           ),
           const SizedBox(height: 12),
           Container(
             width: double.infinity,
-            height: 200,
+            padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
               color: Colors.white,
               borderRadius: BorderRadius.circular(16),
@@ -486,12 +945,89 @@ class _HomeAdminState extends State<HomeAdmin> {
                 ),
               ],
             ),
-            child: IgnorePointer(
-              ignoring: true,
-              child: CustomPaint(
-                size: Size(160, 160),
-                painter: DonutChartPainter(),
-              ),
+            child: Column(
+              children: [
+                // Filter button di pojok kanan atas
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 8,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.grey[200],
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Text(
+                        _selectedRole == 'dosen' ? 'Dosen' : 'Karyawan',
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                    PopupMenuButton<String>(
+                      icon: Icon(Icons.menu, color: Colors.grey[700]),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      onSelected: (value) {
+                        setState(() => _selectedRole = value);
+                        _loadStatistikData();
+                      },
+                      itemBuilder: (BuildContext context) => [
+                        PopupMenuItem(
+                          value: 'karyawan',
+                          child: Row(
+                            children: [
+                              Radio<String>(
+                                value: 'karyawan',
+                                groupValue: _selectedRole,
+                                onChanged: (val) {
+                                  setState(() => _selectedRole = val!);
+                                  Navigator.pop(context);
+                                  _loadStatistikData();
+                                },
+                              ),
+                              const Text('Karyawan'),
+                            ],
+                          ),
+                        ),
+                        PopupMenuItem(
+                          value: 'dosen',
+                          child: Row(
+                            children: [
+                              Radio<String>(
+                                value: 'dosen',
+                                groupValue: _selectedRole,
+                                onChanged: (val) {
+                                  setState(() => _selectedRole = val!);
+                                  Navigator.pop(context);
+                                  _loadStatistikData();
+                                },
+                              ),
+                              const Text('Dosen'),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 20),
+                // Chart
+                SizedBox(
+                  height: 220,
+                  child: _isLoadingStats
+                      ? const Center(child: CircularProgressIndicator())
+                      : CustomPaint(
+                          size: const Size(220, 220),
+                          painter: DonutChartPainter(_statistikData),
+                        ),
+                ),
+              ],
             ),
           ),
         ],
@@ -503,6 +1039,7 @@ class _HomeAdminState extends State<HomeAdmin> {
   Widget _buildDetailBar({
     required String title,
     required double value,
+    required int count,
     required Color color,
   }) {
     return Padding(
@@ -512,12 +1049,21 @@ class _HomeAdminState extends State<HomeAdmin> {
         children: [
           Row(
             children: [
+              Container(
+                width: 12,
+                height: 12,
+                decoration: BoxDecoration(
+                  color: color,
+                  shape: BoxShape.circle,
+                ),
+              ),
+              SizedBox(width: 8),
               Text(
                 title,
                 style: TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w600,
-                  color: color,
+                  color: Colors.black87,
                 ),
               ),
               Spacer(),
@@ -544,43 +1090,138 @@ class _HomeAdminState extends State<HomeAdmin> {
 }
 
 class DonutChartPainter extends CustomPainter {
+  final Map<String, int> data;
+
+  DonutChartPainter(this.data);
+
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()..style = PaintingStyle.stroke;
     final center = Offset(size.width / 2, size.height / 2);
-    final radius = 60.0;
-    final strokeWidth = 20.0;
+    final radius = math.min(size.width, size.height) / 2 - 40;
+    final strokeWidth = 35.0;
 
     paint.strokeWidth = strokeWidth;
-    paint.strokeCap = StrokeCap.round;
 
-    final values = [0.655, 0.165, 0.062, 0.125];
-    final colors = [
-      Color(0xFF2196F3),
-      Color(0xFFFFA500),
-      Color(0xFFFFD700),
-      Color(0xFF4CAF50),
-    ];
+    final total = data['kehadiran']! +
+        data['tepatWaktu']! +
+        data['terlambat']! +
+        data['izin']! +
+        data['sakit']! +
+        data['cuti']!;
 
-    double startAngle = -90 * (3.14159 / 180);
+    if (total == 0) {
+      // Tampilkan circle kosong jika tidak ada data
+      paint.color = Colors.grey[300]!;
+      canvas.drawCircle(center, radius, paint);
 
-    for (int i = 0; i < values.length; i++) {
-      paint.color = colors[i];
-      final sweepAngle = values[i] * 2 * 3.14159;
-      canvas.drawArc(
-        Rect.fromCircle(center: center, radius: radius),
-        startAngle,
-        sweepAngle,
-        false,
-        paint,
+      // Tampilkan text "Belum ada data"
+      final textPainter = TextPainter(
+        text: TextSpan(
+          text: 'Belum ada data',
+          style: TextStyle(
+            color: Colors.grey[600],
+            fontSize: 14,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+        textAlign: TextAlign.center,
+        textDirection: ui.TextDirection.ltr,
       );
-      startAngle += sweepAngle;
+      textPainter.layout();
+      textPainter.paint(
+        canvas,
+        Offset(
+          center.dx - textPainter.width / 2,
+          center.dy - textPainter.height / 2,
+        ),
+      );
+      return;
     }
 
+    final values = [
+      data['kehadiran']! / total,
+      data['tepatWaktu']! / total,
+      data['terlambat']! / total,
+      data['izin']! / total,
+      data['sakit']! / total,
+      data['cuti']! / total,
+    ];
+
+    final colors = [
+      const Color(0xFF5B9BD5), // Kehadiran - Biru
+      const Color(0xFF4CAF50), // Tepat Waktu - Hijau
+      const Color(0xFFFFA500), // Terlambat - Orange
+      const Color(0xFFFFD966), // Izin - Kuning
+      const Color(0xFFFF6B6B), // Sakit - Merah Muda
+      const Color(0xFF9C27B0), // Cuti - Ungu
+    ];
+
+    final labels = ['Kehadiran', 'Tepat Waktu', 'Terlambat', 'Izin', 'Sakit', 'Cuti'];
+
+    double startAngle = -math.pi / 2; // Mulai dari atas
+
+    // Gambar donut chart
+    for (int i = 0; i < values.length; i++) {
+      if (values[i] > 0) {
+        paint.color = colors[i];
+        final sweepAngle = values[i] * 2 * math.pi;
+        canvas.drawArc(
+          Rect.fromCircle(center: center, radius: radius),
+          startAngle,
+          sweepAngle,
+          false,
+          paint,
+        );
+        startAngle += sweepAngle;
+      }
+    }
+
+    // Gambar lingkaran dalam putih
     final innerPaint = Paint()..color = Colors.white;
-    canvas.drawCircle(center, radius - strokeWidth + 2, innerPaint);
+    canvas.drawCircle(center, radius - strokeWidth / 2, innerPaint);
+
+    // Gambar label persentase di dalam chart dengan warna HITAM
+    startAngle = -math.pi / 2;
+    for (int i = 0; i < values.length; i++) {
+      if (values[i] > 0.03) {
+        // Hanya tampilkan label jika > 3%
+        final sweepAngle = values[i] * 2 * math.pi;
+        final middleAngle = startAngle + sweepAngle / 2;
+
+        // Posisi label di tengah arc
+        final labelRadius = radius - strokeWidth / 2;
+        final labelX = center.dx + labelRadius * math.cos(middleAngle);
+        final labelY = center.dy + labelRadius * math.sin(middleAngle);
+
+        // Gambar persentase dengan warna HITAM dan font lebih besar
+        final percentage = (values[i] * 100).toStringAsFixed(0);
+        final labelPainter = TextPainter(
+          text: TextSpan(
+            text: '$percentage%',
+            style: const TextStyle(
+              color: Colors.black, // WARNA HITAM
+              fontSize: 14, // Ukuran lebih besar
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          textAlign: TextAlign.center,
+          textDirection: ui.TextDirection.ltr,
+        );
+        labelPainter.layout();
+        labelPainter.paint(
+          canvas,
+          Offset(
+            labelX - labelPainter.width / 2,
+            labelY - labelPainter.height / 2,
+          ),
+        );
+
+        startAngle += sweepAngle;
+      }
+    }
   }
 
   @override
-  bool shouldRepaint(DonutChartPainter oldDelegate) => false;
+  bool shouldRepaint(DonutChartPainter oldDelegate) => true;
 }

@@ -305,14 +305,6 @@ class _RekapanSakitPageState extends State<RekapanSakitPage> {
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       margin: EdgeInsets.zero,
       child: InkWell(
-        onTap: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (_) => const PengajuanSakitPage(initialTab: 1),
-            ),
-          );
-        },
         child: Theme(
           data: Theme.of(context).copyWith(
             splashColor: Colors.transparent,

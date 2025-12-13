@@ -88,15 +88,14 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     // --- Ukuran yang diskalakan (Diambil dari proporsi login 180x180) ---
     final double finalStackSize = 180.0 * scaleFactor;
     final double bgBelakangWidth = 120.0 * scaleFactor;
-    final double bgDepanWidth = 110.0 * scaleFactor;
+    final double bgDepanWidth = 112.0 * scaleFactor;
     final double logoUtamaWidth = 80.0 * scaleFactor;
-    final double jtiIconHeight =
-        0.35 * logoSize; // Pertahankan rasio dengan logoSize input
+    final double jtiIconHeight = 0.35 * logoSize;
 
     // --- Pergeseran yang diskalakan ---
     final double offsetTopBelakang = 10.0 * scaleFactor;
-    final double offsetRightBelakang = 25.0 * scaleFactor;
-    final double offsetBottomDepan = .0 * scaleFactor;
+    final double offsetRightBelakang = 24.0 * scaleFactor;
+    final double offsetBottomDepan = 4.0 * scaleFactor;
 
     return Column(
       children: [

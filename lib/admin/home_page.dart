@@ -6,10 +6,6 @@ import 'package:languo/admin/pengajuan/sakit_pengajuan_role_page.dart';
 import 'package:languo/admin/pengajuan/cuti_pengajuan_role_page.dart';
 import 'package:languo/admin/pengajuan/izin_pengajuan_role_page.dart';
 import '../models/user_model.dart';
-import '../models/absensi_model.dart';
-import '../models/pengajuan_cuti_model.dart';
-import '../models/pengajuan_izin_model.dart';
-import '../models/pengajuan_sakit_model.dart';
 import '../profile/profile_page.dart';
 import 'rekapan/kehadiran_rekapan_admin_page.dart';
 import 'package:intl/intl.dart';
@@ -24,29 +20,18 @@ class HomeAdmin extends StatefulWidget {
   State<HomeAdmin> createState() => _HomeAdminState();
 }
 
-class StatistikItem {
-  final String label;
-  final int value;
-  final Color color;
-
-  StatistikItem({
-    required this.label,
-    required this.value,
-    required this.color,
-  });
-}
-
 class _HomeAdminState extends State<HomeAdmin> {
   String? _lastScannedData;
   Map<String, int> _statistikData = {
+    'tepatWaktu': 0,
+    'terlambat': 0,
     'izin': 0,
     'sakit': 0,
     'cuti': 0,
     'kehadiran': 0,
   };
   bool _isLoadingStats = true;
-  String _selectedRole = 'semua';
-  String _selectedHoverLabel = 'Total';
+  String _selectedRole = 'dosen'; // Default dosen
 
   @override
   void initState() {
@@ -54,113 +39,209 @@ class _HomeAdminState extends State<HomeAdmin> {
     _loadStatistikData();
   }
 
-  List<StatistikItem> get _statistikItems {
-    return [
-      StatistikItem(
-        label: 'Kehadiran',
-        value: _statistikData['kehadiran'] ?? 0,
-        color: const Color(0xFF5B9BD5),
-      ),
-      StatistikItem(
-        label: 'Izin',
-        value: _statistikData['izin'] ?? 0,
-        color: const Color(0xFFFFD966),
-      ),
-      StatistikItem(
-        label: 'Sakit',
-        value: _statistikData['sakit'] ?? 0,
-        color: const Color(0xFF4CAF50),
-      ),
-      StatistikItem(
-        label: 'Cuti',
-        value: _statistikData['cuti'] ?? 0,
-        color: const Color(0xFFE75636),
-      ),
-    ];
-  }
-
   Future<void> _loadStatistikData() async {
     setState(() => _isLoadingStats = true);
 
     try {
+      int tepatWaktu = 0;
+      int terlambat = 0;
       int kehadiran = 0;
       int izin = 0;
       int sakit = 0;
       int cuti = 0;
 
-      // Ambil semua user sesuai role
-      Query usersRef = FirebaseFirestore.instance.collection('users');
+      debugPrint('=== LOADING STATISTIK untuk $_selectedRole ===');
 
-      if (_selectedRole == 'dosen' || _selectedRole == 'karyawan') {
-        usersRef = usersRef.where('user_role',
-            isEqualTo: firestoreRole(_selectedRole));
-      } else if (_selectedRole == 'semua') {
-        usersRef = usersRef.where('user_role', whereIn: ['Dosen', 'Karyawan']);
-      }
+      // 1. Hitung data absensi berdasarkan role
+      final absensiSnapshot =
+          await FirebaseFirestore.instance.collection('absensi').get();
 
-      final userQuery = await usersRef.get();
-
-      final Map<String, UserModel> usersMap = {
-        for (var doc in userQuery.docs)
-          doc.id.toString(): UserModel.fromFirestore(
-              doc as DocumentSnapshot<Map<String, dynamic>>),
-      };
-
-      final now = DateTime.now();
-      final todayStart =
-          Timestamp.fromDate(DateTime(now.year, now.month, now.day, 0, 0));
-      final todayEnd = Timestamp.fromDate(
-          DateTime(now.year, now.month, now.day, 23, 59, 59));
-
-      // Ambil absensi hari ini
-      final absensiSnapshot = await FirebaseFirestore.instance
-          .collection('absensi')
-          .where('check_in_time', isGreaterThanOrEqualTo: todayStart)
-          .where('check_in_time', isLessThanOrEqualTo: todayEnd)
-          .get();
+      debugPrint('Total dokumen absensi: ${absensiSnapshot.docs.length}');
 
       for (var doc in absensiSnapshot.docs) {
-        final absensi = AbsensiModel.fromMap(doc.data(), doc.id);
-        final userIdStr = absensi.userId.toString();
-        if (!usersMap.containsKey(userIdStr)) continue;
+        final data = doc.data();
 
+        debugPrint('--- Processing absensi doc: ${doc.id} ---');
+        debugPrint('Raw data: $data');
+
+        // Coba ambil user_id dengan berbagai kemungkinan
+        final userIdRaw = data['user_id'];
+        debugPrint('user_id raw type: ${userIdRaw.runtimeType}');
+        debugPrint('user_id raw value: "$userIdRaw"');
+
+        String userId = '';
+        if (userIdRaw is int) {
+          userId = userIdRaw.toString();
+        } else if (userIdRaw is String) {
+          userId = userIdRaw;
+        } else {
+          userId = userIdRaw?.toString() ?? '';
+        }
+
+        debugPrint('user_id setelah konversi: "$userId"');
+
+        if (userId.isEmpty) {
+          debugPrint('Skip: user_id kosong');
+          continue;
+        }
+
+        // Cek role user berdasarkan user_id
+        final userRole = await _getUserRoleByUserId(userId);
+
+        debugPrint('Role yang ditemukan: $userRole, Filter: $_selectedRole');
+
+        if (userRole == null) {
+          debugPrint('❌ User $userId tidak ditemukan di collection manapun');
+          continue;
+        }
+
+        if (userRole != _selectedRole) {
+          debugPrint('Skip: role=$userRole, filter=$_selectedRole');
+          continue;
+        }
+
+        // Ambil check_in_time dan check_out_time (Timestamp dari Firestore)
+        final checkInTimestamp = data['check_in_time'] as Timestamp?;
+        final checkOutTimestamp = data['check_out_time'] as Timestamp?;
+
+        debugPrint('check_in_time: $checkInTimestamp');
+        debugPrint('check_out_time: $checkOutTimestamp');
+
+        if (checkInTimestamp == null || checkOutTimestamp == null) {
+          debugPrint('Skip: check_in_time atau check_out_time null');
+          continue;
+        }
+
+        final checkInTime = checkInTimestamp.toDate();
+        final checkOutTime = checkOutTimestamp.toDate();
+
+        // Hitung kehadiran (yang sudah check in DAN check out)
         kehadiran++;
+        debugPrint('✓ Kehadiran++ untuk user $userId: Total = $kehadiran');
+
+        // Hitung tepat waktu vs terlambat (berdasarkan jam check in)
+        try {
+          final hour = checkInTime.hour;
+          final minute = checkInTime.minute;
+
+          debugPrint(
+              'Check in time: ${hour.toString().padLeft(2, '0')}:${minute.toString().padLeft(2, '0')}');
+
+          // Tepat waktu jika sebelum atau sama dengan 07:30
+          if (hour < 7 || (hour == 7 && minute <= 30)) {
+            tepatWaktu++;
+            debugPrint('✓ Tepat Waktu: Total = $tepatWaktu');
+          } else {
+            terlambat++;
+            debugPrint('✓ Terlambat: Total = $terlambat');
+          }
+        } catch (e) {
+          debugPrint('Error parsing time: $e');
+        }
       }
 
-      // Ambil pengajuan izin, sakit, cuti yang disetujui
+      debugPrint(
+          'Hasil Absensi: Kehadiran=$kehadiran, Tepat Waktu=$tepatWaktu, Terlambat=$terlambat');
+
+      // 2. Hitung izin yang disetujui
+      debugPrint('--- Mengecek Izin ---');
       final izinSnapshot = await FirebaseFirestore.instance
           .collection('pengajuan_izin')
           .where('status', isEqualTo: 'Disetujui')
           .get();
+
+      debugPrint(
+          'Total izin dengan status Disetujui: ${izinSnapshot.docs.length}');
+
       for (var doc in izinSnapshot.docs) {
-        final izinModel = PengajuanIzinModel.fromFirestore(doc);
-        if (usersMap.containsKey(izinModel.userId.toString())) izin++;
+        final data = doc.data();
+        var userRole = (data['user_role'] ?? '').toString().trim();
+        final userName = data['user_name'] ?? '';
+
+        // Normalisasi role ke lowercase
+        userRole = userRole.toLowerCase();
+
+        debugPrint(
+            'Izin - User: $userName, Role: "$userRole", Filter: "$_selectedRole"');
+
+        if (userRole == _selectedRole) {
+          izin++;
+          debugPrint('✓ Izin MATCH! Total: $izin');
+        } else {
+          debugPrint('✗ Izin TIDAK MATCH (role tidak sama)');
+        }
       }
 
+      // 3. Hitung sakit yang disetujui
+      debugPrint('--- Mengecek Sakit ---');
       final sakitSnapshot = await FirebaseFirestore.instance
           .collection('pengajuan_sakit')
           .where('status', isEqualTo: 'Disetujui')
           .get();
+
+      debugPrint(
+          'Total sakit dengan status Disetujui: ${sakitSnapshot.docs.length}');
+
       for (var doc in sakitSnapshot.docs) {
-        final sakitModel = PengajuanSakitModel.fromFirestore(doc);
-        if (usersMap.containsKey(sakitModel.userId.toString())) sakit++;
+        final data = doc.data();
+        var userRole = (data['user_role'] ?? '').toString().trim();
+        final userName = data['user_name'] ?? '';
+
+        // Normalisasi role ke lowercase
+        userRole = userRole.toLowerCase();
+
+        debugPrint(
+            'Sakit - User: $userName, Role: "$userRole", Filter: "$_selectedRole"');
+
+        if (userRole == _selectedRole) {
+          sakit++;
+          debugPrint('✓ Sakit MATCH! Total: $sakit');
+        } else {
+          debugPrint('✗ Sakit TIDAK MATCH (role tidak sama)');
+        }
       }
 
+      // 4. Hitung cuti yang disetujui
+      debugPrint('--- Mengecek Cuti ---');
       final cutiSnapshot = await FirebaseFirestore.instance
           .collection('pengajuan_cuti')
           .where('status', isEqualTo: 'Disetujui')
           .get();
+
+      debugPrint(
+          'Total cuti dengan status Disetujui: ${cutiSnapshot.docs.length}');
+
       for (var doc in cutiSnapshot.docs) {
-        try {
-          final cutiModel = PengajuanCutiModel.fromFirestore(doc);
-          if (usersMap.containsKey(cutiModel.userId.toString())) cuti++;
-        } catch (e) {
-          debugPrint('Skip cuti document ${doc.id} karena error: $e');
+        final data = doc.data();
+        var userRole = (data['user_role'] ?? '').toString().trim();
+        final userName = data['user_name'] ?? '';
+
+        // Normalisasi role ke lowercase
+        userRole = userRole.toLowerCase();
+
+        debugPrint(
+            'Cuti - User: $userName, Role: "$userRole", Filter: "$_selectedRole"');
+
+        if (userRole == _selectedRole) {
+          cuti++;
+          debugPrint('✓ Cuti MATCH! Total: $cuti');
+        } else {
+          debugPrint('✗ Cuti TIDAK MATCH (role tidak sama)');
         }
       }
 
+      debugPrint('=== HASIL AKHIR STATISTIK ($_selectedRole) ===');
+      debugPrint('Kehadiran: $kehadiran');
+      debugPrint('Tepat Waktu: $tepatWaktu');
+      debugPrint('Terlambat: $terlambat');
+      debugPrint('Izin: $izin');
+      debugPrint('Sakit: $sakit');
+      debugPrint('Cuti: $cuti');
+
       setState(() {
         _statistikData = {
+          'tepatWaktu': tepatWaktu,
+          'terlambat': terlambat,
           'izin': izin,
           'sakit': sakit,
           'cuti': cuti,
@@ -168,20 +249,98 @@ class _HomeAdminState extends State<HomeAdmin> {
         };
         _isLoadingStats = false;
       });
-    } catch (e, st) {
-      debugPrint('Error load statistik: $e\n$st');
+    } catch (e) {
+      debugPrint('❌ Error loading statistik: $e');
       setState(() => _isLoadingStats = false);
     }
   }
 
-  String firestoreRole(String role) {
-    switch (role) {
-      case 'dosen':
-        return 'Dosen';
-      case 'karyawan':
-        return 'Karyawan';
-      default:
-        return ''; // fallback
+  // Fungsi untuk mendapatkan role berdasarkan user_id (menggunakan document ID)
+  Future<String?> _getUserRoleByUserId(String userId) async {
+    try {
+      // Cek di collection dosen berdasarkan document ID
+      var doc = await FirebaseFirestore.instance
+          .collection('dosen')
+          .doc(userId)
+          .get();
+      if (doc.exists) {
+        debugPrint('✓ User $userId ditemukan di collection DOSEN');
+        return 'dosen';
+      }
+
+      // Cek di collection karyawan berdasarkan document ID
+      doc = await FirebaseFirestore.instance
+          .collection('karyawan')
+          .doc(userId)
+          .get();
+      if (doc.exists) {
+        debugPrint('✓ User $userId ditemukan di collection KARYAWAN');
+        return 'karyawan';
+      }
+
+      // Cek di collection users berdasarkan document ID (fallback)
+      doc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(userId)
+          .get();
+      if (doc.exists) {
+        final data = doc.data() as Map<String, dynamic>;
+        final role = (data['user_role'] ?? 'karyawan').toString().toLowerCase();
+        debugPrint(
+            '✓ User $userId ditemukan di collection USERS dengan role: $role');
+        return role;
+      }
+
+      debugPrint('✗ User $userId TIDAK DITEMUKAN di collection manapun');
+      return null;
+    } catch (e) {
+      debugPrint('❌ Error getting user role for $userId: $e');
+      return null;
+    }
+  }
+
+  Future<String?> _getUserRole(String userId) async {
+    if (userId.isEmpty) return null;
+
+    try {
+      // Cek di collection dosen
+      var doc = await FirebaseFirestore.instance
+          .collection('dosen')
+          .doc(userId)
+          .get();
+      if (doc.exists) {
+        debugPrint('✓ User $userId ditemukan di collection DOSEN');
+        return 'dosen';
+      }
+
+      // Cek di collection karyawan
+      doc = await FirebaseFirestore.instance
+          .collection('karyawan')
+          .doc(userId)
+          .get();
+      if (doc.exists) {
+        debugPrint('✓ User $userId ditemukan di collection KARYAWAN');
+        return 'karyawan';
+      }
+
+      // Cek di collection users
+      doc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(userId)
+          .get();
+      if (doc.exists) {
+        final data = doc.data() as Map<String, dynamic>;
+        final role = (data['user_role'] ?? 'karyawan').toString().toLowerCase();
+        debugPrint(
+            '✓ User $userId ditemukan di collection USERS dengan role: $role');
+        return role;
+      }
+
+      debugPrint('✗ User $userId TIDAK DITEMUKAN di collection manapun');
+      return null;
+    } catch (e) {
+      debugPrint('❌ Error getting user role for $userId: $e');
+      return null;
     }
   }
 
@@ -199,9 +358,71 @@ class _HomeAdminState extends State<HomeAdmin> {
     return UserModel.fromFirestore(doc);
   }
 
+  void _showRoleFilterDialog() {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return Dialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: Container(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text(
+                  'Pilih Role',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 20),
+                ListTile(
+                  leading: Radio<String>(
+                    value: 'dosen',
+                    groupValue: _selectedRole,
+                    onChanged: (value) {
+                      setState(() => _selectedRole = value!);
+                      Navigator.pop(context);
+                      _loadStatistikData();
+                    },
+                  ),
+                  title: const Text('Dosen'),
+                  onTap: () {
+                    setState(() => _selectedRole = 'dosen');
+                    Navigator.pop(context);
+                    _loadStatistikData();
+                  },
+                ),
+                ListTile(
+                  leading: Radio<String>(
+                    value: 'karyawan',
+                    groupValue: _selectedRole,
+                    onChanged: (value) {
+                      setState(() => _selectedRole = value!);
+                      Navigator.pop(context);
+                      _loadStatistikData();
+                    },
+                  ),
+                  title: const Text('Karyawan'),
+                  onTap: () {
+                    setState(() => _selectedRole = 'karyawan');
+                    Navigator.pop(context);
+                    _loadStatistikData();
+                  },
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    // Kode UI sama persis dengan HomeAdmin Anda, tidak perlu diubah
     return Scaffold(
       backgroundColor: Colors.grey[100],
       bottomNavigationBar: _buildBottomNav(),
@@ -224,7 +445,7 @@ class _HomeAdminState extends State<HomeAdmin> {
                 const SizedBox(height: 40),
                 _buildAktivitasChart(),
                 const SizedBox(height: 20),
-                const Padding(
+                Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 16),
                   child: Text(
                     "Detail",
@@ -242,12 +463,89 @@ class _HomeAdminState extends State<HomeAdmin> {
     );
   }
 
+  Widget _buildDetailSection() {
+    if (_isLoadingStats) {
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.all(20),
+          child: CircularProgressIndicator(),
+        ),
+      );
+    }
+
+    final total = _statistikData['kehadiran']! +
+        _statistikData['tepatWaktu']! +
+        _statistikData['terlambat']! +
+        _statistikData['izin']! +
+        _statistikData['sakit']! +
+        _statistikData['cuti']!;
+
+    if (total == 0) {
+      return Padding(
+        padding: const EdgeInsets.all(20),
+        child: Center(
+          child: Column(
+            children: [
+              Icon(Icons.analytics_outlined, size: 48, color: Colors.grey[400]),
+              const SizedBox(height: 8),
+              Text(
+                'Belum ada data untuk ${_selectedRole == 'dosen' ? 'Dosen' : 'Karyawan'}',
+                style: TextStyle(color: Colors.grey[600]),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return Column(
+      children: [
+        _buildDetailBar(
+          title: "Kehadiran",
+          value: _statistikData['kehadiran']! / total,
+          count: _statistikData['kehadiran']!,
+          color: const Color(0xFF5B9BD5),
+        ),
+        _buildDetailBar(
+          title: "Tepat Waktu",
+          value: _statistikData['tepatWaktu']! / total,
+          count: _statistikData['tepatWaktu']!,
+          color: const Color(0xFF4CAF50),
+        ),
+        _buildDetailBar(
+          title: "Terlambat",
+          value: _statistikData['terlambat']! / total,
+          count: _statistikData['terlambat']!,
+          color: const Color(0xFFFFA500),
+        ),
+        _buildDetailBar(
+          title: "Izin",
+          value: _statistikData['izin']! / total,
+          count: _statistikData['izin']!,
+          color: const Color(0xFFFFD966),
+        ),
+        _buildDetailBar(
+          title: "Sakit",
+          value: _statistikData['sakit']! / total,
+          count: _statistikData['sakit']!,
+          color: const Color(0xFFFF6B6B),
+        ),
+        _buildDetailBar(
+          title: "Cuti",
+          value: _statistikData['cuti']! / total,
+          count: _statistikData['cuti']!,
+          color: const Color(0xFF9C27B0),
+        ),
+      ],
+    );
+  }
+
   // ===================== Scan Result =====================
   Widget _buildScanResultInfo() {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: Container(
-        padding: const EdgeInsets.all(16),
+        padding: EdgeInsets.all(16),
         decoration: BoxDecoration(
           color: Colors.green[50],
           borderRadius: BorderRadius.circular(12),
@@ -255,8 +553,8 @@ class _HomeAdminState extends State<HomeAdmin> {
         ),
         child: Row(
           children: [
-            const Icon(Icons.check_circle, color: Colors.green, size: 24),
-            const SizedBox(width: 12),
+            Icon(Icons.check_circle, color: Colors.green, size: 24),
+            SizedBox(width: 12),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -268,7 +566,7 @@ class _HomeAdminState extends State<HomeAdmin> {
                       color: Colors.green[800],
                     ),
                   ),
-                  const SizedBox(height: 4),
+                  SizedBox(height: 4),
                   Text(
                     _lastScannedData ?? "",
                     style: TextStyle(
@@ -282,7 +580,7 @@ class _HomeAdminState extends State<HomeAdmin> {
               ),
             ),
             IconButton(
-              icon: const Icon(Icons.close, size: 20),
+              icon: Icon(Icons.close, size: 20),
               onPressed: () {
                 if (!mounted) return;
                 setState(() => _lastScannedData = null);
@@ -316,7 +614,7 @@ class _HomeAdminState extends State<HomeAdmin> {
             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             children: [
               _bottomItem(Icons.home, "Beranda", true, () {}),
-              const SizedBox(width: 80),
+              SizedBox(width: 80),
               _bottomItem(Icons.person_outline, "Profile", false, () {
                 Navigator.push(
                   context,
@@ -332,25 +630,25 @@ class _HomeAdminState extends State<HomeAdmin> {
             onTap: () async {
               await Navigator.push(
                 context,
-                MaterialPageRoute(builder: (context) => const BuatQRPage()),
+                MaterialPageRoute(builder: (context) => BuatQRPage()),
               );
             },
             child: Container(
               width: 70,
               height: 70,
               decoration: BoxDecoration(
-                color: const Color(0xFF36546C),
+                color: Color(0xFF36546C),
                 shape: BoxShape.circle,
                 boxShadow: [
                   BoxShadow(
                     color: Colors.black.withOpacity(0.2),
                     blurRadius: 15,
-                    offset: const Offset(0, 5),
+                    offset: Offset(0, 5),
                   ),
                 ],
                 border: Border.all(color: Colors.white, width: 4),
               ),
-              child: const Center(
+              child: Center(
                 child: Icon(Icons.add, color: Colors.white, size: 38),
               ),
             ),
@@ -370,14 +668,14 @@ class _HomeAdminState extends State<HomeAdmin> {
         children: [
           Icon(
             icon,
-            color: active ? const Color(0xFF36546C) : Colors.grey[400],
+            color: active ? Color(0xFF36546C) : Colors.grey[400],
             size: 26,
           ),
           const SizedBox(height: 4),
           Text(
             label,
             style: TextStyle(
-              color: active ? const Color(0xFF36546C) : Colors.grey[400],
+              color: active ? Color(0xFF36546C) : Colors.grey[400],
               fontSize: 11,
               fontWeight: active ? FontWeight.w600 : FontWeight.w400,
             ),
@@ -411,12 +709,12 @@ class _HomeAdminState extends State<HomeAdmin> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text("HAI!",
+                    Text("HAI!",
                         style: TextStyle(color: Colors.white, fontSize: 12)),
                     const SizedBox(height: 4),
                     Text(
                       user?.userName ?? "-",
-                      style: const TextStyle(
+                      style: TextStyle(
                         color: Colors.white,
                         fontSize: 20,
                         fontWeight: FontWeight.w700,
@@ -425,7 +723,7 @@ class _HomeAdminState extends State<HomeAdmin> {
                     const SizedBox(height: 2),
                     Text(
                       user?.userRole ?? "-",
-                      style: const TextStyle(
+                      style: TextStyle(
                         color: Colors.white70,
                         fontSize: 11,
                       ),
@@ -473,7 +771,7 @@ class _HomeAdminState extends State<HomeAdmin> {
         decoration: BoxDecoration(
           color: Color(0xFFE3E3E3),
           borderRadius: BorderRadius.circular(20),
-          boxShadow: const [
+          boxShadow: [
             BoxShadow(
               color: Colors.black12,
               blurRadius: 6,
@@ -527,7 +825,7 @@ class _HomeAdminState extends State<HomeAdmin> {
           const SizedBox(height: 8),
           Text(
             label,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w600,
               color: Colors.black87,
@@ -574,7 +872,7 @@ class _HomeAdminState extends State<HomeAdmin> {
                 ],
               ),
               const SizedBox(height: 16),
-              const Text(
+              Text(
                 "07:00 - 17:00",
                 style: TextStyle(
                   fontWeight: FontWeight.bold,
@@ -617,142 +915,7 @@ class _HomeAdminState extends State<HomeAdmin> {
   }
 
   // ===================== Chart =====================
-  // =====================================================================
-// HELPER METHODS
-// =====================================================================
-
-// Helper untuk menghitung persentase item yang sedang di-hover
-  String _getHoverPercentage(String label, Map<String, int> data) {
-    // Mapping label ke kunci data
-    final keyMap = {
-      'Kehadiran': 'kehadiran',
-      'Izin': 'izin',
-      'Sakit': 'sakit',
-      'Cuti': 'cuti'
-    };
-    final key = keyMap[label];
-
-    if (key == null) return '0%';
-
-    final total = data.values.reduce((a, b) => a + b);
-    if (total == 0) return '0%';
-
-    final value = data[key] ?? 0;
-    return '${(value / total * 100).toStringAsFixed(0)}%';
-  }
-
-// A. Custom Segmented Button untuk Filter Peran
-  Widget _buildRoleFilterButtons(Color selectedColor) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.end,
-      children: [
-        _buildRoleButton('semua', 'Semua', selectedColor),
-        const SizedBox(width: 8),
-        _buildRoleButton('dosen', 'Dosen', selectedColor),
-        const SizedBox(width: 8),
-        _buildRoleButton('karyawan', 'Karyawan', selectedColor),
-      ],
-    );
-  }
-
-  Widget _buildRoleButton(String value, String label, Color selectedColor) {
-    final isSelected = _selectedRole == value;
-    return InkWell(
-      onTap: () {
-        setState(() => _selectedRole = value);
-        _loadStatistikData();
-      },
-      borderRadius: BorderRadius.circular(20),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-        decoration: BoxDecoration(
-          color: isSelected ? selectedColor : Colors.grey[200],
-          borderRadius: BorderRadius.circular(20),
-          boxShadow: isSelected
-              ? [
-                  BoxShadow(
-                      color: selectedColor.withOpacity(0.3),
-                      blurRadius: 4,
-                      offset: const Offset(0, 2))
-                ]
-              : null,
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            fontSize: 14,
-            fontWeight: FontWeight.w600,
-            color: isSelected ? Colors.white : Colors.grey[700],
-          ),
-        ),
-      ),
-    );
-  }
-
-  // Modifikasi pada _buildLegendItem
-  Widget _buildLegendItem(StatistikItem item, Color primaryColor) {
-    final total = _statistikData.values.reduce((a, b) => a + b);
-    final percentage = total == 0 ? 0.0 : (item.value / total);
-
-    // Sekarang hanya bergantung pada _selectedHoverLabel yang disetel oleh TAP
-    final isSelected = _selectedHoverLabel == item.label;
-
-    // Hapus MouseRegion. Hanya gunakan InkWell.
-    return InkWell(
-      onTap: () {
-        // Tap berfungsi sebagai toggle:
-        // Jika sudah terpilih, kembalikan ke 'Total'. Jika belum, pilih item ini.
-        final newLabel = isSelected ? 'Total' : item.label;
-        setState(() => _selectedHoverLabel = newLabel);
-      },
-      borderRadius: BorderRadius.circular(12),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        decoration: BoxDecoration(
-          // Gunakan isSelected (berdasarkan Tap) untuk menyorot Legend
-          color: isSelected ? item.color.withOpacity(0.15) : Colors.grey[50],
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: isSelected ? item.color : Colors.grey[300]!,
-            width: isSelected ? 2 : 1,
-          ),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // Dot Warna
-            Container(
-              width: 10,
-              height: 10,
-              decoration: BoxDecoration(
-                color: item.color,
-                shape: BoxShape.circle,
-              ),
-            ),
-            const SizedBox(width: 8),
-            // Label & Persentase
-            Text(
-              '${item.label} (${(percentage * 100).toStringAsFixed(0)}%)',
-              style: TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w600,
-                color: isSelected ? primaryColor : Colors.grey[800],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  // ===================== Chart (Tampilan Utama) =====================
   Widget _buildAktivitasChart() {
-    const primaryColor = const Color(0xFF2B3541);
-    final totalValue = _statistikData.values.reduce((a, b) => a + b);
-    final totalPercentage = totalValue > 0 ? 100 : 0;
-
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Column(
@@ -761,15 +924,12 @@ class _HomeAdminState extends State<HomeAdmin> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text(
+              Text(
                 "Aktivitas keseluruhan",
-                style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: primaryColor),
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
               ),
               if (_isLoadingStats)
-                const SizedBox(
+                SizedBox(
                   width: 20,
                   height: 20,
                   child: CircularProgressIndicator(strokeWidth: 2),
@@ -785,70 +945,93 @@ class _HomeAdminState extends State<HomeAdmin> {
               borderRadius: BorderRadius.circular(16),
               boxShadow: [
                 BoxShadow(
-                  color: primaryColor.withOpacity(0.1),
-                  blurRadius: 10,
-                  offset: const Offset(0, 4),
+                  color: Colors.black12,
+                  blurRadius: 8,
+                  offset: Offset(0, 2),
                 ),
               ],
             ),
             child: Column(
               children: [
-                _buildRoleFilterButtons(primaryColor),
+                // Filter button di pojok kanan atas
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 8,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.grey[200],
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Text(
+                        _selectedRole == 'dosen' ? 'Dosen' : 'Karyawan',
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                    PopupMenuButton<String>(
+                      icon: Icon(Icons.menu, color: Colors.grey[700]),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      onSelected: (value) {
+                        setState(() => _selectedRole = value);
+                        _loadStatistikData();
+                      },
+                      itemBuilder: (BuildContext context) => [
+                        PopupMenuItem(
+                          value: 'karyawan',
+                          child: Row(
+                            children: [
+                              Radio<String>(
+                                value: 'karyawan',
+                                groupValue: _selectedRole,
+                                onChanged: (val) {
+                                  setState(() => _selectedRole = val!);
+                                  Navigator.pop(context);
+                                  _loadStatistikData();
+                                },
+                              ),
+                              const Text('Karyawan'),
+                            ],
+                          ),
+                        ),
+                        PopupMenuItem(
+                          value: 'dosen',
+                          child: Row(
+                            children: [
+                              Radio<String>(
+                                value: 'dosen',
+                                groupValue: _selectedRole,
+                                onChanged: (val) {
+                                  setState(() => _selectedRole = val!);
+                                  Navigator.pop(context);
+                                  _loadStatistikData();
+                                },
+                              ),
+                              const Text('Dosen'),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
                 const SizedBox(height: 20),
+                // Chart
                 SizedBox(
                   height: 220,
                   child: _isLoadingStats
-                      ? const Center(
-                          child: CircularProgressIndicator(color: primaryColor))
-                      : Stack(
-                          alignment: Alignment.center,
-                          children: [
-                            // Donut Chart DENGAN PROPERTI TAMBAHAN
-                            CustomPaint(
-                              size: const Size(220, 220),
-                              painter: DonutChartPainter(
-                                _statistikData, // Map<String, int> data
-                                _selectedHoverLabel, // String label yang di-hover/diklik
-                                _statistikItems, // List<StatistikItem> untuk warna
-                              ),
-                            ),
-                            // Teks di Tengah Lingkaran
-                            Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Text(
-                                  _selectedHoverLabel == 'Total'
-                                      ? "$totalPercentage%"
-                                      : _getHoverPercentage(
-                                          _selectedHoverLabel, _statistikData),
-                                  style: const TextStyle(
-                                    fontSize: 32,
-                                    fontWeight: FontWeight.w900,
-                                    color: primaryColor,
-                                  ),
-                                ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  _selectedHoverLabel, // Label status yang sedang ditampilkan
-                                  style: TextStyle(
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w500,
-                                    color: Colors.grey[600],
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ],
+                      ? const Center(child: CircularProgressIndicator())
+                      : CustomPaint(
+                          size: const Size(220, 220),
+                          painter: DonutChartPainter(_statistikData),
                         ),
-                ),
-                const SizedBox(height: 30),
-                Wrap(
-                  spacing: 12,
-                  runSpacing: 12,
-                  alignment: WrapAlignment.center,
-                  children: _statistikItems.map((item) {
-                    return _buildLegendItem(item, primaryColor);
-                  }).toList(),
                 ),
               ],
             ),
@@ -858,7 +1041,7 @@ class _HomeAdminState extends State<HomeAdmin> {
     );
   }
 
-  // ===================== Detail Bar (Tetap Sederhana) =====================
+  // ===================== Detail Bar =====================
   Widget _buildDetailBar({
     required String title,
     required double value,
@@ -880,22 +1063,19 @@ class _HomeAdminState extends State<HomeAdmin> {
                   shape: BoxShape.circle,
                 ),
               ),
-              const SizedBox(width: 8),
+              SizedBox(width: 8),
               Text(
-                "$title ($count)", // Menambahkan count ke judul
-                style: const TextStyle(
-                  fontSize: 14,
+                title,
+                style: TextStyle(
+                  fontSize: 13,
                   fontWeight: FontWeight.w600,
                   color: Colors.black87,
                 ),
               ),
-              const Spacer(),
+              Spacer(),
               Text(
                 "${(value * 100).toStringAsFixed(1)}%",
-                style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                    color: Color(0xFF2B3541)),
+                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
               ),
             ],
           ),
@@ -913,113 +1093,35 @@ class _HomeAdminState extends State<HomeAdmin> {
       ),
     );
   }
-
-// ===================== Detail Section =====================
-  Widget _buildDetailSection() {
-    const colorHadir = Color(0xFF5B9BD5);
-    const colorIzin = Color(0xFFFFD966);
-    const colorSakit = Color(0xFF4CAF50);
-    const colorCuti = Color(0xFFE75636);
-
-    if (_isLoadingStats) {
-      return const Center(
-        child: Padding(
-          padding: EdgeInsets.all(20),
-          child: CircularProgressIndicator(),
-        ),
-      );
-    }
-
-    final hadir = _statistikData['kehadiran']!;
-    final izin = _statistikData['izin']!;
-    final sakit = _statistikData['sakit']!;
-    final cuti = _statistikData['cuti']!;
-    final total = hadir + izin + sakit + cuti;
-
-    if (total == 0) {
-      return Padding(
-        padding: const EdgeInsets.all(20),
-        child: Center(
-          child: Column(
-            children: [
-              Icon(Icons.analytics_outlined, size: 48, color: Colors.grey[400]),
-              const SizedBox(height: 8),
-              Text(
-                'Belum ada data',
-                style: TextStyle(color: Colors.grey[600]),
-              ),
-            ],
-          ),
-        ),
-      );
-    }
-
-    return Column(
-      children: [
-        _buildDetailBar(
-          title: "Hadir",
-          value: hadir / total,
-          count: hadir,
-          color: colorHadir,
-        ),
-        _buildDetailBar(
-          title: "Izin",
-          value: izin / total,
-          count: izin,
-          color: colorIzin,
-        ),
-        _buildDetailBar(
-          title: "Sakit",
-          value: sakit / total,
-          count: sakit,
-          color: colorSakit,
-        ),
-        _buildDetailBar(
-          title: "Cuti",
-          value: cuti / total,
-          count: cuti,
-          color: colorCuti,
-        ),
-      ],
-    );
-  }
 }
 
 class DonutChartPainter extends CustomPainter {
   final Map<String, int> data;
-  final String hoveredLabel;
-  final List<StatistikItem> items;
 
-  DonutChartPainter(this.data, this.hoveredLabel, this.items);
-
-  // Mapping label tampilan ke kunci data Map
-  final keyMap = const {
-    'Kehadiran': 'kehadiran',
-    'Izin': 'izin',
-    'Sakit': 'sakit',
-    'Cuti': 'cuti'
-  };
+  DonutChartPainter(this.data);
 
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()..style = PaintingStyle.stroke;
     final center = Offset(size.width / 2, size.height / 2);
-    final radius = math.min(size.width, size.height) / 2 - 10;
-    const strokeWidth = 40.0;
+    final radius = math.min(size.width, size.height) / 2 - 40;
+    final strokeWidth = 35.0;
 
     paint.strokeWidth = strokeWidth;
 
-    // Pastikan data Map tidak nol (karena Map<String, int> biasanya tidak mengandung null)
-    final total = (data['kehadiran'] ?? 0) +
-        (data['izin'] ?? 0) +
-        (data['sakit'] ?? 0) +
-        (data['cuti'] ?? 0);
+    final total = data['kehadiran']! +
+        data['tepatWaktu']! +
+        data['terlambat']! +
+        data['izin']! +
+        data['sakit']! +
+        data['cuti']!;
 
     if (total == 0) {
-      // Logika penanganan data nol Anda yang asli
+      // Tampilkan circle kosong jika tidak ada data
       paint.color = Colors.grey[300]!;
       canvas.drawCircle(center, radius, paint);
 
+      // Tampilkan text "Belum ada data"
       final textPainter = TextPainter(
         text: TextSpan(
           text: 'Belum ada data',
@@ -1043,30 +1145,40 @@ class DonutChartPainter extends CustomPainter {
       return;
     }
 
-    paint.color = Colors.grey[200]!;
-    canvas.drawCircle(center, radius, paint);
+    final values = [
+      data['kehadiran']! / total,
+      data['tepatWaktu']! / total,
+      data['terlambat']! / total,
+      data['izin']! / total,
+      data['sakit']! / total,
+      data['cuti']! / total,
+    ];
 
-    double startAngle = -math.pi / 2;
+    final colors = [
+      const Color(0xFF5B9BD5), // Kehadiran - Biru
+      const Color(0xFF4CAF50), // Tepat Waktu - Hijau
+      const Color(0xFFFFA500), // Terlambat - Orange
+      const Color(0xFFFFD966), // Izin - Kuning
+      const Color(0xFFFF6B6B), // Sakit - Merah Muda
+      const Color(0xFF9C27B0), // Cuti - Ungu
+    ];
 
-    for (var item in items) {
-      final key = keyMap[item.label];
-      final value = (key != null) ? (data[key] ?? 0) : 0;
+    final labels = [
+      'Kehadiran',
+      'Tepat Waktu',
+      'Terlambat',
+      'Izin',
+      'Sakit',
+      'Cuti'
+    ];
 
-      if (value > 0) {
-        final sweepAngle = (value / total) * 2 * math.pi;
+    double startAngle = -math.pi / 2; // Mulai dari atas
 
-        bool isHovered = item.label == hoveredLabel;
-        Color segmentColor;
-
-        if (hoveredLabel == 'Total' || isHovered) {
-          segmentColor = item.color;
-        } else {
-          // Segmen lain memudar
-          segmentColor = item.color.withOpacity(0.4);
-        }
-
-        paint.color = segmentColor;
-
+    // Gambar donut chart
+    for (int i = 0; i < values.length; i++) {
+      if (values[i] > 0) {
+        paint.color = colors[i];
+        final sweepAngle = values[i] * 2 * math.pi;
         canvas.drawArc(
           Rect.fromCircle(center: center, radius: radius),
           startAngle,
@@ -1078,14 +1190,51 @@ class DonutChartPainter extends CustomPainter {
       }
     }
 
+    // Gambar lingkaran dalam putih
     final innerPaint = Paint()..color = Colors.white;
-    canvas.drawCircle(center, radius - strokeWidth / 2 + 2, innerPaint);
+    canvas.drawCircle(center, radius - strokeWidth / 2, innerPaint);
+
+    // Gambar label persentase di dalam chart dengan warna HITAM
+    startAngle = -math.pi / 2;
+    for (int i = 0; i < values.length; i++) {
+      if (values[i] > 0.03) {
+        // Hanya tampilkan label jika > 3%
+        final sweepAngle = values[i] * 2 * math.pi;
+        final middleAngle = startAngle + sweepAngle / 2;
+
+        // Posisi label di tengah arc
+        final labelRadius = radius - strokeWidth / 2;
+        final labelX = center.dx + labelRadius * math.cos(middleAngle);
+        final labelY = center.dy + labelRadius * math.sin(middleAngle);
+
+        // Gambar persentase dengan warna HITAM dan font lebih besar
+        final percentage = (values[i] * 100).toStringAsFixed(0);
+        final labelPainter = TextPainter(
+          text: TextSpan(
+            text: '$percentage%',
+            style: const TextStyle(
+              color: Colors.black, // WARNA HITAM
+              fontSize: 14, // Ukuran lebih besar
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          textAlign: TextAlign.center,
+          textDirection: ui.TextDirection.ltr,
+        );
+        labelPainter.layout();
+        labelPainter.paint(
+          canvas,
+          Offset(
+            labelX - labelPainter.width / 2,
+            labelY - labelPainter.height / 2,
+          ),
+        );
+
+        startAngle += sweepAngle;
+      }
+    }
   }
 
   @override
-  bool shouldRepaint(covariant DonutChartPainter oldDelegate) {
-    return oldDelegate.data != data ||
-        oldDelegate.hoveredLabel != hoveredLabel ||
-        oldDelegate.items != items;
-  }
+  bool shouldRepaint(DonutChartPainter oldDelegate) => true;
 }

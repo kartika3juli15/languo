@@ -6,6 +6,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../../services/cuti_service.dart';
 import '../rekapan/cuti_rekapan_user_page.dart';
 import 'package:intl/intl.dart';
+import 'package:languo/users/home_page.dart';
 
 class PengajuanCutiPage extends StatefulWidget {
   final int initialTab;
@@ -25,7 +26,6 @@ class _PengajuanCutiPageState extends State<PengajuanCutiPage> {
   DateTime? endDate;
   num? sisaCutiSaatPengajuan;
   List<DateTime> _holidays = [];
-
 
   bool isFetchingCuti = true;
   bool isLoading = false;
@@ -553,7 +553,13 @@ class _PengajuanCutiPageState extends State<PengajuanCutiPage> {
           Align(
             alignment: Alignment.centerLeft,
             child: GestureDetector(
-              onTap: () => Navigator.pop(context),
+              onTap: () {
+                Navigator.pushAndRemoveUntil(
+                  context,
+                  MaterialPageRoute(builder: (_) => const HomePageUser()),
+                  (route) => false,
+                );
+              },
               child: const Padding(
                 padding: EdgeInsets.only(left: 16),
                 child: Icon(Icons.arrow_back, color: Colors.white, size: 28),

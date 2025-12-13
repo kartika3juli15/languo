@@ -337,14 +337,6 @@ class _RekapanIzinPageState extends State<RekapanIzinPage> {
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       margin: EdgeInsets.zero,
       child: InkWell(
-        onTap: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (_) => const PengajuanIzinPage(initialTab: 1),
-            ),
-          );
-        },
         child: Theme(
           data: Theme.of(context).copyWith(
               splashColor: Colors.transparent,

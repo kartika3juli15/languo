@@ -8,7 +8,6 @@ import 'package:http/http.dart' as http;
 import 'package:open_file/open_file.dart';
 import 'package:path_provider/path_provider.dart';
 import 'dart:io';
-import 'package:languo/users/pengajuan/cuti_pengajuan_page.dart';
 
 class CutiRekapanData {
   final String id;
@@ -316,14 +315,6 @@ class _RekapanCutiPageState extends State<RekapanCutiPage> {
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       margin: EdgeInsets.zero,
       child: InkWell(
-        onTap: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (_) => const PengajuanCutiPage(initialTab: 1),
-            ),
-          );
-        },
         child: Theme(
           data: Theme.of(context).copyWith(
             splashColor: Colors.transparent,

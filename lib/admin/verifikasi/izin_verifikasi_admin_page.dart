@@ -3,6 +3,13 @@ import 'package:languo/admin/rekapan/izin_rekapan_admin_page.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:languo/admin/pengajuan/izin_pengajuan_role_page.dart';
+import 'dart:io';
+import 'package:universal_html/html.dart' as html;
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:http/http.dart' as http;
+import 'package:open_file/open_file.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:flutter/foundation.dart';
 
 class VerifikasiIzinPage extends StatefulWidget {
   final String role; // menerima role dari halaman sebelumnya
@@ -242,6 +249,7 @@ class _VerifikasiIzinPageState extends State<VerifikasiIzinPage> {
             child: ElevatedButton.icon(
               onPressed: () async {
                 final url = data['lampiran_url'];
+
                 if (url == null || url.isEmpty) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(content: Text("File tidak tersedia")),
@@ -249,33 +257,16 @@ class _VerifikasiIzinPageState extends State<VerifikasiIzinPage> {
                   return;
                 }
 
-                final uri = Uri.parse(url);
-                if (!await launchUrl(uri,
-                    mode: LaunchMode.externalApplication)) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text("Gagal membuka file")),
-                  );
-                }
+                await _openPdf(url); // ⬅️ ganti dari launchUrl ke openPdf
               },
-              icon: const Icon(
-                Icons.insert_drive_file,
-                color: Colors.white, // ⬅ ICON PUTIH
-                size: 30,
-              ),
+              icon: const Icon(Icons.insert_drive_file, color: Colors.white),
               label: const Text(
                 "File",
-                style: TextStyle(
-                  color: Colors.white, // ⬅ TEKS PUTIH
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                ),
+                style:
+                    TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
               ),
               style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFFE4572E), // ⬅ ORANYE
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                padding: const EdgeInsets.symmetric(vertical: 14),
+                backgroundColor: Color(0xFFE4572E),
               ),
             ),
           ),
@@ -537,6 +528,45 @@ class _VerifikasiIzinPageState extends State<VerifikasiIzinPage> {
         );
       },
     );
+  }
+
+  Future<void> _openPdf(String url) async {
+    try {
+      // === Jika Web ===
+      if (kIsWeb) {
+        html.window.open(url, '_blank');
+        return;
+      }
+
+      // === Jika Android/iOS ===
+      final uri = Uri.parse(url);
+      final response = await http.get(uri);
+
+      if (response.statusCode == 200) {
+        final bytes = response.bodyBytes;
+
+        // Simpan sementara di device
+        final tempDir = await getTemporaryDirectory();
+        final filePath = "${tempDir.path}/lampiran.pdf";
+
+        final file = File(filePath);
+        await file.writeAsBytes(bytes);
+
+        // Buka file menggunakan aplikasi di HP
+        await OpenFile.open(filePath);
+      } else {
+        _showMessage(
+            "Gagal mengunduh lampiran (status: ${response.statusCode}).");
+      }
+    } catch (e) {
+      _showMessage("Terjadi kesalahan saat membuka PDF.");
+    }
+  }
+
+  void _showMessage(String msg) {
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+    }
   }
 
   // ====================== UI ======================

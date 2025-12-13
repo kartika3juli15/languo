@@ -120,7 +120,7 @@ class _LoginScreenState extends State<LoginScreen> {
         );
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Error: ${e.message}")),
+          const SnackBar(content: Text("Email dan Password tidak sesuai.")),
         );
       }
     } catch (e) {
@@ -247,7 +247,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                     ),
 
-                    const SizedBox(height: 30),
+                    const SizedBox(height: 20),
 
                     SizedBox(
                       width: 160,

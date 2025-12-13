@@ -122,9 +122,9 @@ class _NotifikasiAdminPageState extends State<NotifikasiAdminPage> {
 
             // Ambil start & end untuk display saja
             String tanggalDisplay = "-";
-            if (d["tanggalMulai"] != null && d["tanggalSelesai"] != null) {
-              final start = (d["tanggalMulai"] as Timestamp).toDate();
-              final end = (d["tanggalSelesai"] as Timestamp).toDate();
+            if (d["tanggal_mulai"] != null && d["tanggal_selesai"] != null) {
+              final start = (d["tanggal_mulai"] as Timestamp).toDate();
+              final end = (d["tanggal_selesai"] as Timestamp).toDate();
               tanggalDisplay =
                   "${start.day}/${start.month}/${start.year} - ${end.day}/${end.month}/${end.year}";
             }
@@ -135,17 +135,17 @@ class _NotifikasiAdminPageState extends State<NotifikasiAdminPage> {
                   : jenis == "Izin"
                       ? "Pengajuan Izin"
                       : "Pengajuan Sakit",
-              "nama": d["userName"] ?? "-",
-              "email": d["emailUser"] ?? "-",
-              "role": d["userRole"] ?? "-",
+              "nama": d["user_name"] ?? "-",
+              "email": d["user_email"] ?? "-",
+              "role": d["user_role"] ?? "-",
               "alasan": d["alasan"] ?? "",
               "perihal": d["perihal"] ?? "",
               "keterangan": d["keterangan"] ?? "",
               "sisaCuti": d["sisa_cuti_saat_pengajuan"] ?? 0,
               "tanggal": tanggalDisplay,
               "status": d["status"] ?? "-",
-              "Lampiran": d["lampiranUrl"] ?? "",
-              "createdAt": d["createdAt"] ?? Timestamp.now(),
+              "Lampiran": d["lampiran_url"] ?? "",
+              "createdAt": d["created_at"] ?? Timestamp.now(),
             });
           }
         }

@@ -62,7 +62,6 @@ class AbsensiModel {
     
     return AbsensiModel(
       userId: userId,
-      // Hapus: qrId: map['qr_id'] as int,
       operatorUid: map['operator_uid'] as String,
       checkInTime: map['check_in_time'] as Timestamp,
       checkOutTime: map['check_out_time'] as Timestamp,

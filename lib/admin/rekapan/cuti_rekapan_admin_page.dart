@@ -3,6 +3,13 @@ import 'package:flutter/material.dart';
 import 'package:languo/admin/verifikasi/cuti_verifikasi_admin_page.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:languo/admin/pengajuan/cuti_pengajuan_role_page.dart';
+import 'dart:io';
+import 'package:universal_html/html.dart' as html;
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:http/http.dart' as http;
+import 'package:open_file/open_file.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:flutter/foundation.dart';
 
 class RekapanAdminCutiPage extends StatefulWidget {
   final String role;
@@ -18,6 +25,45 @@ class _RekapanAdminCutiPageState extends State<RekapanAdminCutiPage> {
   TextEditingController searchController = TextEditingController();
   String keyword = "";
   int expandedIndex = -1;
+
+  Future<void> _openPdf(String url) async {
+    try {
+      // === Jika Web ===
+      if (kIsWeb) {
+        html.window.open(url, '_blank');
+        return;
+      }
+
+      // === Jika Android/iOS ===
+      final uri = Uri.parse(url);
+      final response = await http.get(uri);
+
+      if (response.statusCode == 200) {
+        final bytes = response.bodyBytes;
+
+        // Simpan sementara di device
+        final tempDir = await getTemporaryDirectory();
+        final filePath = "${tempDir.path}/lampiran.pdf";
+
+        final file = File(filePath);
+        await file.writeAsBytes(bytes);
+
+        // Buka file menggunakan aplikasi di HP
+        await OpenFile.open(filePath);
+      } else {
+        _showMessage(
+            "Gagal mengunduh lampiran (status: ${response.statusCode}).");
+      }
+    } catch (e) {
+      _showMessage("Terjadi kesalahan saat membuka PDF.");
+    }
+  }
+
+  void _showMessage(String msg) {
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -371,14 +417,14 @@ class _RekapanAdminCutiPageState extends State<RekapanAdminCutiPage> {
             const SizedBox(height: 15),
             GestureDetector(
               onTap: () async {
-                final uri = Uri.parse(file);
-                if (await canLaunchUrl(uri)) {
-                  await launchUrl(uri, mode: LaunchMode.externalApplication);
-                } else {
+                if (file.isEmpty) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text("Tidak bisa membuka file")),
+                    const SnackBar(content: Text("File tidak tersedia")),
                   );
+                  return;
                 }
+
+                await _openPdf(file);
               },
               child: Container(
                 height: 45,
@@ -391,7 +437,13 @@ class _RekapanAdminCutiPageState extends State<RekapanAdminCutiPage> {
                   children: [
                     Icon(Icons.picture_as_pdf, color: Colors.white),
                     SizedBox(width: 8),
-                    Text("File", style: TextStyle(color: Colors.white)),
+                    Text(
+                      "File",
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
                   ],
                 ),
               ),

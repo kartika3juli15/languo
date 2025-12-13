@@ -7,10 +7,7 @@ import 'package:languo/admin/pengajuan/cuti_pengajuan_role_page.dart';
 import 'package:languo/admin/pengajuan/izin_pengajuan_role_page.dart';
 import '../models/user_model.dart';
 import '../profile/profile_page.dart';
-import 'rekapan/izin_rekapan_admin_page.dart';
-import 'rekapan/sakit_rekapan_admin_page.dart';
 import 'rekapan/kehadiran_rekapan_admin_page.dart';
-import 'tambah_jadwal.dart';
 import 'package:intl/intl.dart';
 import 'package:languo/admin/user_management_page.dart';
 import 'dart:ui' as ui;
@@ -56,23 +53,22 @@ class _HomeAdminState extends State<HomeAdmin> {
       debugPrint('=== LOADING STATISTIK untuk $_selectedRole ===');
 
       // 1. Hitung data absensi berdasarkan role
-      final absensiSnapshot = await FirebaseFirestore.instance
-          .collection('absensi')
-          .get();
+      final absensiSnapshot =
+          await FirebaseFirestore.instance.collection('absensi').get();
 
       debugPrint('Total dokumen absensi: ${absensiSnapshot.docs.length}');
 
       for (var doc in absensiSnapshot.docs) {
         final data = doc.data();
-        
+
         debugPrint('--- Processing absensi doc: ${doc.id} ---');
         debugPrint('Raw data: $data');
-        
+
         // Coba ambil user_id dengan berbagai kemungkinan
         final userIdRaw = data['user_id'];
         debugPrint('user_id raw type: ${userIdRaw.runtimeType}');
         debugPrint('user_id raw value: "$userIdRaw"');
-        
+
         String userId = '';
         if (userIdRaw is int) {
           userId = userIdRaw.toString();
@@ -81,9 +77,9 @@ class _HomeAdminState extends State<HomeAdmin> {
         } else {
           userId = userIdRaw?.toString() ?? '';
         }
-        
+
         debugPrint('user_id setelah konversi: "$userId"');
-        
+
         if (userId.isEmpty) {
           debugPrint('Skip: user_id kosong');
           continue;
@@ -91,14 +87,14 @@ class _HomeAdminState extends State<HomeAdmin> {
 
         // Cek role user berdasarkan user_id
         final userRole = await _getUserRoleByUserId(userId);
-        
+
         debugPrint('Role yang ditemukan: $userRole, Filter: $_selectedRole');
-        
+
         if (userRole == null) {
           debugPrint('❌ User $userId tidak ditemukan di collection manapun');
           continue;
         }
-        
+
         if (userRole != _selectedRole) {
           debugPrint('Skip: role=$userRole, filter=$_selectedRole');
           continue;
@@ -128,7 +124,8 @@ class _HomeAdminState extends State<HomeAdmin> {
           final hour = checkInTime.hour;
           final minute = checkInTime.minute;
 
-          debugPrint('Check in time: ${hour.toString().padLeft(2, '0')}:${minute.toString().padLeft(2, '0')}');
+          debugPrint(
+              'Check in time: ${hour.toString().padLeft(2, '0')}:${minute.toString().padLeft(2, '0')}');
 
           // Tepat waktu jika sebelum atau sama dengan 07:30
           if (hour < 7 || (hour == 7 && minute <= 30)) {
@@ -143,7 +140,8 @@ class _HomeAdminState extends State<HomeAdmin> {
         }
       }
 
-      debugPrint('Hasil Absensi: Kehadiran=$kehadiran, Tepat Waktu=$tepatWaktu, Terlambat=$terlambat');
+      debugPrint(
+          'Hasil Absensi: Kehadiran=$kehadiran, Tepat Waktu=$tepatWaktu, Terlambat=$terlambat');
 
       // 2. Hitung izin yang disetujui
       debugPrint('--- Mengecek Izin ---');
@@ -152,18 +150,20 @@ class _HomeAdminState extends State<HomeAdmin> {
           .where('status', isEqualTo: 'Disetujui')
           .get();
 
-      debugPrint('Total izin dengan status Disetujui: ${izinSnapshot.docs.length}');
+      debugPrint(
+          'Total izin dengan status Disetujui: ${izinSnapshot.docs.length}');
 
       for (var doc in izinSnapshot.docs) {
         final data = doc.data();
         var userRole = (data['user_role'] ?? '').toString().trim();
         final userName = data['user_name'] ?? '';
-        
+
         // Normalisasi role ke lowercase
         userRole = userRole.toLowerCase();
-        
-        debugPrint('Izin - User: $userName, Role: "$userRole", Filter: "$_selectedRole"');
-        
+
+        debugPrint(
+            'Izin - User: $userName, Role: "$userRole", Filter: "$_selectedRole"');
+
         if (userRole == _selectedRole) {
           izin++;
           debugPrint('✓ Izin MATCH! Total: $izin');
@@ -179,18 +179,20 @@ class _HomeAdminState extends State<HomeAdmin> {
           .where('status', isEqualTo: 'Disetujui')
           .get();
 
-      debugPrint('Total sakit dengan status Disetujui: ${sakitSnapshot.docs.length}');
+      debugPrint(
+          'Total sakit dengan status Disetujui: ${sakitSnapshot.docs.length}');
 
       for (var doc in sakitSnapshot.docs) {
         final data = doc.data();
         var userRole = (data['user_role'] ?? '').toString().trim();
         final userName = data['user_name'] ?? '';
-        
+
         // Normalisasi role ke lowercase
         userRole = userRole.toLowerCase();
-        
-        debugPrint('Sakit - User: $userName, Role: "$userRole", Filter: "$_selectedRole"');
-        
+
+        debugPrint(
+            'Sakit - User: $userName, Role: "$userRole", Filter: "$_selectedRole"');
+
         if (userRole == _selectedRole) {
           sakit++;
           debugPrint('✓ Sakit MATCH! Total: $sakit');
@@ -206,18 +208,20 @@ class _HomeAdminState extends State<HomeAdmin> {
           .where('status', isEqualTo: 'Disetujui')
           .get();
 
-      debugPrint('Total cuti dengan status Disetujui: ${cutiSnapshot.docs.length}');
+      debugPrint(
+          'Total cuti dengan status Disetujui: ${cutiSnapshot.docs.length}');
 
       for (var doc in cutiSnapshot.docs) {
         final data = doc.data();
         var userRole = (data['user_role'] ?? '').toString().trim();
         final userName = data['user_name'] ?? '';
-        
+
         // Normalisasi role ke lowercase
         userRole = userRole.toLowerCase();
-        
-        debugPrint('Cuti - User: $userName, Role: "$userRole", Filter: "$_selectedRole"');
-        
+
+        debugPrint(
+            'Cuti - User: $userName, Role: "$userRole", Filter: "$_selectedRole"');
+
         if (userRole == _selectedRole) {
           cuti++;
           debugPrint('✓ Cuti MATCH! Total: $cuti');
@@ -282,7 +286,8 @@ class _HomeAdminState extends State<HomeAdmin> {
       if (doc.exists) {
         final data = doc.data() as Map<String, dynamic>;
         final role = (data['user_role'] ?? 'karyawan').toString().toLowerCase();
-        debugPrint('✓ User $userId ditemukan di collection USERS dengan role: $role');
+        debugPrint(
+            '✓ User $userId ditemukan di collection USERS dengan role: $role');
         return role;
       }
 
@@ -326,7 +331,8 @@ class _HomeAdminState extends State<HomeAdmin> {
       if (doc.exists) {
         final data = doc.data() as Map<String, dynamic>;
         final role = (data['user_role'] ?? 'karyawan').toString().toLowerCase();
-        debugPrint('✓ User $userId ditemukan di collection USERS dengan role: $role');
+        debugPrint(
+            '✓ User $userId ditemukan di collection USERS dengan role: $role');
         return role;
       }
 
@@ -1157,7 +1163,14 @@ class DonutChartPainter extends CustomPainter {
       const Color(0xFF9C27B0), // Cuti - Ungu
     ];
 
-    final labels = ['Kehadiran', 'Tepat Waktu', 'Terlambat', 'Izin', 'Sakit', 'Cuti'];
+    final labels = [
+      'Kehadiran',
+      'Tepat Waktu',
+      'Terlambat',
+      'Izin',
+      'Sakit',
+      'Cuti'
+    ];
 
     double startAngle = -math.pi / 2; // Mulai dari atas
 

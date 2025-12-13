@@ -4,9 +4,13 @@ import 'package:file_picker/file_picker.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../../services/izin_service.dart';
 import '../rekapan/izin_rekapan_user_page.dart';
+import 'package:intl/intl.dart';
+import 'package:languo/users/home_page.dart';
 
 class PengajuanIzinPage extends StatefulWidget {
-  const PengajuanIzinPage({super.key});
+  final int initialTab;
+
+  const PengajuanIzinPage({super.key, this.initialTab = 0});
 
   @override
   State<PengajuanIzinPage> createState() => _PengajuanIzinPageState();
@@ -17,6 +21,13 @@ class _PengajuanIzinPageState extends State<PengajuanIzinPage> {
   final _auth = FirebaseAuth.instance;
 
   int selectedTab = 0;
+  @override
+  void initState() {
+    super.initState();
+    selectedTab = widget.initialTab;
+    Intl.defaultLocale = 'id_ID';
+  }
+
   DateTime? tanggalMulai;
   DateTime? tanggalSelesai;
 
@@ -278,7 +289,13 @@ class _PengajuanIzinPageState extends State<PengajuanIzinPage> {
           Align(
             alignment: Alignment.centerLeft,
             child: GestureDetector(
-              onTap: () => Navigator.pop(context),
+              onTap: () {
+                Navigator.pushAndRemoveUntil(
+                  context,
+                  MaterialPageRoute(builder: (_) => const HomePageUser()),
+                  (route) => false,
+                );
+              },
               child: const Padding(
                 padding: EdgeInsets.only(left: 16),
                 child: Icon(Icons.arrow_back, color: Colors.white, size: 28),

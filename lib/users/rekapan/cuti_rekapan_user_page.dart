@@ -4,7 +4,10 @@ import 'package:firebase_auth/firebase_auth.dart';
 import '../../../services/cuti_service.dart';
 import 'package:universal_html/html.dart' as html;
 import 'package:flutter/foundation.dart' show kIsWeb;
-import 'package:url_launcher/url_launcher.dart';
+import 'package:http/http.dart' as http;
+import 'package:open_file/open_file.dart';
+import 'package:path_provider/path_provider.dart';
+import 'dart:io';
 
 class CutiRekapanData {
   final String id;
@@ -85,14 +88,16 @@ class _RekapanCutiPageState extends State<RekapanCutiPage> {
             }
             if (userSnapshot.hasError) {
               return Center(
-                  child: Text('Error loading user data: ${userSnapshot.error}'));
+                  child:
+                      Text('Error loading user data: ${userSnapshot.error}'));
             }
 
-            final userData = userSnapshot.data ?? {
-              'userName': 'Data Tidak Ditemukan',
-              'userEmail': 'N/A',
-              'userRole': 'N/A',
-            };
+            final userData = userSnapshot.data ??
+                {
+                  'userName': 'Data Tidak Ditemukan',
+                  'userEmail': 'N/A',
+                  'userRole': 'N/A',
+                };
 
             final cutiList = docs.map((d) {
               final data = d.data() as Map<String, dynamic>;
@@ -141,8 +146,10 @@ class _RekapanCutiPageState extends State<RekapanCutiPage> {
 
   Future<Map<String, String>> _fetchUserData(String userId) async {
     try {
-      final userDoc =
-          await FirebaseFirestore.instance.collection("users").doc(userId).get();
+      final userDoc = await FirebaseFirestore.instance
+          .collection("users")
+          .doc(userId)
+          .get();
       final data = userDoc.data();
 
       return {
@@ -246,16 +253,36 @@ class _RekapanCutiPageState extends State<RekapanCutiPage> {
     );
   }
 
-  Future<void> openPdf(String url, BuildContext context) async {
-    if (kIsWeb) {
-      html.window.open(url, '_blank');
-    } else {
-      final Uri uri = Uri.parse(url);
-      if (await canLaunchUrl(uri)) {
-        await launchUrl(uri, mode: LaunchMode.externalApplication);
-      } else {
-        _showMessage('Gagal membuka lampiran: URL tidak valid');
+  Future<void> _openPdf(String url) async {
+    try {
+      // === Jika Web ===
+      if (kIsWeb) {
+        html.window.open(url, '_blank');
+        return;
       }
+
+      // === Jika Android/iOS ===
+      final uri = Uri.parse(url);
+      final response = await http.get(uri);
+
+      if (response.statusCode == 200) {
+        final bytes = response.bodyBytes;
+
+        // Simpan sementara di device
+        final tempDir = await getTemporaryDirectory();
+        final filePath = "${tempDir.path}/lampiran.pdf";
+
+        final file = File(filePath);
+        await file.writeAsBytes(bytes);
+
+        // Buka file menggunakan aplikasi di HP
+        await OpenFile.open(filePath);
+      } else {
+        _showMessage(
+            "Gagal mengunduh lampiran (status: ${response.statusCode}).");
+      }
+    } catch (e) {
+      _showMessage("Terjadi kesalahan saat membuka PDF.");
     }
   }
 
@@ -287,109 +314,117 @@ class _RekapanCutiPageState extends State<RekapanCutiPage> {
       elevation: 4,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       margin: EdgeInsets.zero,
-      child: Theme(
-        data: Theme.of(context).copyWith(
+      child: InkWell(
+        child: Theme(
+          data: Theme.of(context).copyWith(
             splashColor: Colors.transparent,
-            highlightColor: Colors.transparent),
-        child: ExpansionTile(
-          tilePadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          title: Text(
-            cuti.alasan,
-            style: const TextStyle(
-              fontWeight: FontWeight.bold,
-              fontSize: 16,
-              color: Color(0xFF2B3541),
+            highlightColor: Colors.transparent,
+          ),
+          child: ExpansionTile(
+            tilePadding:
+                const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            title: Text(
+              cuti.alasan,
+              style: const TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 16,
+                color: Color(0xFF2B3541),
+              ),
             ),
-          ),
-          subtitle: Padding(
-            padding: const EdgeInsets.only(top: 4.0),
-            child: Row(
-              children: [
-                const Icon(Icons.calendar_month, size: 16, color: Colors.grey),
-                const SizedBox(width: 6),
-                Expanded(
-                  child: Text(
-                    "Periode: $periodeCuti",
-                    style: const TextStyle(fontSize: 13, color: Colors.black87),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          trailing: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (cuti.lampiranUrl != null && cuti.lampiranUrl!.isNotEmpty)
-                const Padding(
-                  padding: EdgeInsets.only(right: 8.0),
-                  child: Icon(Icons.attachment,
-                      color: Colors.deepOrange, size: 20),
-                ),
-              statusBadge(cuti.status, _statusColor(cuti.status)),
-              const SizedBox(width: 4),
-              const Icon(Icons.arrow_drop_down, color: Colors.grey),
-            ],
-          ),
-          children: [
-            const Divider(height: 1, thickness: 1, indent: 16, endIndent: 16),
-            Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+            subtitle: Padding(
+              padding: const EdgeInsets.only(top: 4.0),
+              child: Row(
                 children: [
-                  _buildDetailRow("Nama", cuti.userName),
-                  _buildDetailRow("Email", cuti.userEmail),
-                  _buildDetailRow("Jabatan", cuti.userRole),
-                  const SizedBox(height: 12),
-                  _buildDetailRow(
-                      "Tgl Pengajuan", _formatTanggal(cuti.tanggalPengajuan)),
-                  _buildDetailRow("Status", cuti.status,
-                      isStatus: true, statusColor: _statusColor(cuti.status)),
-                  _buildDetailRow("Keterangan",
-                      cuti.keterangan.isEmpty ? "-" : cuti.keterangan),
-                  if (cuti.lampiranUrl != null && cuti.lampiranUrl!.isNotEmpty)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 15.0),
-                      child: ElevatedButton.icon(
-                        onPressed: () => openPdf(cuti.lampiranUrl!, context),
-                        icon: const Icon(Icons.file_download,
-                            size: 20, color: Colors.white),
-                        label: const Text(
-                          "Lihat Lampiran",
-                          style: TextStyle(
-                              color: Colors.white, fontWeight: FontWeight.w600),
-                        ),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF1666A9),
-                          minimumSize: const Size(double.infinity, 40),
-                          shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(8)),
-                        ),
-                      ),
+                  const Icon(Icons.calendar_month,
+                      size: 16, color: Colors.grey),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      "Periode: $periodeCuti",
+                      style:
+                          const TextStyle(fontSize: 13, color: Colors.black87),
                     ),
-                  if (canDelete)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 10.0),
-                      child: OutlinedButton.icon(
-                        onPressed: () => _showConfirmDeleteDialog(cuti.id),
-                        icon: const Icon(Icons.delete_forever,
-                            color: Colors.red, size: 20),
-                        label: const Text("Hapus Pengajuan",
-                            style: TextStyle(
-                                color: Colors.red,
-                                fontWeight: FontWeight.w600)),
-                        style: OutlinedButton.styleFrom(
-                          side: const BorderSide(color: Colors.red),
-                          minimumSize: const Size(double.infinity, 40),
-                          shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(8)),
-                        ),
-                      ),
-                    ),
+                  ),
                 ],
               ),
             ),
-          ],
+            trailing: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (cuti.lampiranUrl != null && cuti.lampiranUrl!.isNotEmpty)
+                  const Padding(
+                    padding: EdgeInsets.only(right: 8.0),
+                    child: Icon(Icons.attachment,
+                        color: Colors.deepOrange, size: 20),
+                  ),
+                statusBadge(cuti.status, _statusColor(cuti.status)),
+                const SizedBox(width: 4),
+                const Icon(Icons.arrow_drop_down, color: Colors.grey),
+              ],
+            ),
+            children: [
+              const Divider(height: 1, thickness: 1, indent: 16, endIndent: 16),
+              Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildDetailRow("Nama", cuti.userName),
+                    _buildDetailRow("Email", cuti.userEmail),
+                    _buildDetailRow("Jabatan", cuti.userRole),
+                    const SizedBox(height: 12),
+                    _buildDetailRow(
+                        "Tgl Pengajuan", _formatTanggal(cuti.tanggalPengajuan)),
+                    _buildDetailRow("Status", cuti.status,
+                        isStatus: true, statusColor: _statusColor(cuti.status)),
+                    _buildDetailRow("Keterangan",
+                        cuti.keterangan.isEmpty ? "-" : cuti.keterangan),
+                    if (cuti.lampiranUrl != null &&
+                        cuti.lampiranUrl!.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 15.0),
+                        child: ElevatedButton.icon(
+                          onPressed: () => _openPdf(cuti.lampiranUrl!),
+                          icon: const Icon(Icons.file_download,
+                              size: 20, color: Colors.white),
+                          label: const Text(
+                            "Lihat Lampiran",
+                            style: TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w600),
+                          ),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF1666A9),
+                            minimumSize: const Size(double.infinity, 40),
+                            shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8)),
+                          ),
+                        ),
+                      ),
+                    if (canDelete)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 10.0),
+                        child: OutlinedButton.icon(
+                          onPressed: () => _showConfirmDeleteDialog(cuti.id),
+                          icon: const Icon(Icons.delete_forever,
+                              color: Colors.red, size: 20),
+                          label: const Text("Hapus Pengajuan",
+                              style: TextStyle(
+                                  color: Colors.red,
+                                  fontWeight: FontWeight.w600)),
+                          style: OutlinedButton.styleFrom(
+                            side: const BorderSide(color: Colors.red),
+                            minimumSize: const Size(double.infinity, 40),
+                            shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8)),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

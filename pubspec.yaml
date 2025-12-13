@@ -37,6 +37,9 @@ dependencies:
   url_launcher: ^6.3.2
   rxdart: ^0.27.7
   universal_html: ^2.3.0
+  http: ^1.2.0
+  open_file: ^3.3.2
+  path_provider: ^2.1.5
 
 dev_dependencies:
   flutter_test:

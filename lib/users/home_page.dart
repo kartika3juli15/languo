@@ -25,7 +25,7 @@ class HomePageUser extends StatefulWidget {
 class _HomePageUserState extends State<HomePageUser> {
   String? _lastScannedData;
   bool _localeReady = false;
-  
+
   // Data untuk statistik
   int _totalHadir = 0;
   int _totalProses = 0;
@@ -91,12 +91,12 @@ class _HomePageUserState extends State<HomePageUser> {
       // dan yang masih proses (check_in ada tapi check_out kosong)
       int hadirCount = 0;
       int prosesCount = 0;
-      
+
       for (var doc in hadirSnapshot.docs) {
         final data = doc.data();
         final checkIn = data['check_in'] ?? '';
         final checkOut = data['check_out'] ?? '';
-        
+
         if (checkIn.isNotEmpty && checkOut.isNotEmpty) {
           // Sudah check out (kehadiran selesai)
           hadirCount++;
@@ -365,7 +365,7 @@ class _HomePageUserState extends State<HomePageUser> {
         if (!snapshot.hasData) {
           return Container(
             padding: const EdgeInsets.fromLTRB(20, 40, 20, 50),
-            child: Text("Loading...",
+            child: const Text("Loading...",
                 style: TextStyle(color: Colors.white, fontSize: 16)),
             decoration: const BoxDecoration(
               color: Color(0xFF36546C),
@@ -460,7 +460,8 @@ class _HomePageUserState extends State<HomePageUser> {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceEvenly,
       children: [
-        _menuButton(Icons.accessibility_new, "Hadir", const Color(0xFF5B7C99), () async {
+        _menuButton(Icons.accessibility_new, "Hadir", const Color(0xFF5B7C99),
+            () async {
           await Navigator.push(
             context,
             MaterialPageRoute(builder: (_) => const KehadiranPage()),
@@ -476,7 +477,8 @@ class _HomePageUserState extends State<HomePageUser> {
           // Refresh data setelah kembali dari halaman Izin
           _loadStatistics();
         }),
-        _menuButton(Icons.medical_services, "Sakit", const Color(0xFF5B7C99), () async {
+        _menuButton(Icons.medical_services, "Sakit", const Color(0xFF5B7C99),
+            () async {
           await Navigator.push(
             context,
             MaterialPageRoute(builder: (_) => const PengajuanSakitPage()),
@@ -484,7 +486,8 @@ class _HomePageUserState extends State<HomePageUser> {
           // Refresh data setelah kembali dari halaman Sakit
           _loadStatistics();
         }),
-        _menuButton(Icons.watch_later, "Cuti", const Color(0xFF5B7C99), () async {
+        _menuButton(Icons.watch_later, "Cuti", const Color(0xFF5B7C99),
+            () async {
           await Navigator.push(
             context,
             MaterialPageRoute(builder: (_) => const PengajuanCutiPage()),
@@ -496,7 +499,8 @@ class _HomePageUserState extends State<HomePageUser> {
     );
   }
 
-  Widget _menuButton(IconData icon, String title, Color color, VoidCallback onTap) {
+  Widget _menuButton(
+      IconData icon, String title, Color color, VoidCallback onTap) {
     return GestureDetector(
       onTap: onTap,
       child: Column(
@@ -511,7 +515,7 @@ class _HomePageUserState extends State<HomePageUser> {
                 BoxShadow(
                   color: color.withOpacity(0.3),
                   blurRadius: 8,
-                  offset: Offset(0, 4),
+                  offset: const Offset(0, 4),
                 ),
               ],
             ),
@@ -563,18 +567,21 @@ class _HomePageUserState extends State<HomePageUser> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              Text(
-                formattedDate,
-                style: const TextStyle(
-                  color: Colors.black87,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  formattedDate,
+                  style: const TextStyle(
+                    color: Colors.black87,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
               ),
               const SizedBox(height: 16),
               const Center(
                 child: Text(
-                  "08:00 - 18:00",
+                  "07:00 - 17:00",
                   style: TextStyle(
                     fontWeight: FontWeight.bold,
                     fontSize: 32,
@@ -676,8 +683,9 @@ class _HomePageUserState extends State<HomePageUser> {
 
   // ===================== Detail Section =====================
   Widget _buildDetailSection() {
-    final total = _totalHadir + _totalIzin + _totalSakit + _totalCuti + _totalProses;
-    
+    final total =
+        _totalHadir + _totalIzin + _totalSakit + _totalCuti + _totalProses;
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Column(
@@ -696,14 +704,14 @@ class _HomePageUserState extends State<HomePageUser> {
             title: "Hadir",
             count: _totalHadir,
             total: total,
-            color: Color(0xFF5BA3D0),
+            color: const Color(0xFF5BA3D0),
           ),
           const SizedBox(height: 12),
           _buildDetailBar(
             title: "Proses (belum check-out)",
             count: _totalProses,
             total: total,
-            color: Color(0xFFF5A623),
+            color: const Color(0xFFF5A623),
           ),
           const SizedBox(height: 12),
           _buildDetailBar(
@@ -739,7 +747,7 @@ class _HomePageUserState extends State<HomePageUser> {
   }) {
     final value = total > 0 ? (count / total) : 0.0;
     final percentage = (value * 100).toStringAsFixed(1);
-    
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -820,7 +828,7 @@ class DonutChartPainter extends CustomPainter {
     if (total == 0) {
       paint.color = Colors.grey[300]!;
       canvas.drawCircle(center, radius, paint);
-      
+
       final textPainterEmpty = TextPainter(
         text: const TextSpan(
           text: 'Tidak ada data',
@@ -860,7 +868,6 @@ class DonutChartPainter extends CustomPainter {
     ];
 
     final labels = ['Hadir', 'Proses', 'Izin', 'Sakit', 'Cuti'];
-    final counts = [hadir, proses, izin, sakit, cuti];
 
     double startAngle = -90 * (3.14159 / 180);
 
@@ -928,7 +935,8 @@ class DonutChartPainter extends CustomPainter {
         textPainter.paint(canvas, Offset(textX, textY - 8));
         percentPainter.paint(
           canvas,
-          Offset(textX + (textPainter.width - percentPainter.width) / 2, textY + 6),
+          Offset(textX + (textPainter.width - percentPainter.width) / 2,
+              textY + 6),
         );
 
         startAngle += sweepAngle;

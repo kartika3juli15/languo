@@ -8,7 +8,6 @@ import 'package:http/http.dart' as http;
 import 'package:open_file/open_file.dart';
 import 'package:path_provider/path_provider.dart';
 import 'dart:io';
-import 'package:languo/users/pengajuan/izin_pengajuan_page.dart';
 
 class IzinRekapanData {
   final String id;

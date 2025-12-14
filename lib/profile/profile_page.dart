@@ -21,7 +21,6 @@ class ProfilePage extends StatefulWidget {
 }
 
 class _ProfilePageState extends State<ProfilePage> {
-  String? _lastScannedData;
   String? userRole;
 
   late Future<UserModel?> futureUser;
@@ -406,7 +405,6 @@ class _ProfilePageState extends State<ProfilePage> {
                 if (!mounted) return;
 
                 if (result != null) {
-                  setState(() => _lastScannedData = result);
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(
                       content: Text("QR Code berhasil dipindai!"),

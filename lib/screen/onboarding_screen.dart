@@ -9,12 +9,9 @@ class OnboardingScreen extends StatefulWidget {
 }
 
 class _OnboardingScreenState extends State<OnboardingScreen> {
-  // --- Warna dari LoginScreen ---
-  static const Color accentColor = Color(0xFFE75636); // Deep Orange
-  static const Color primaryColor = Color(0xFF2B3541); // Biru Tua
-  static const Color backgroundColorOnboarding =
-      Color(0xFF223546); // Latar Belakang Onboarding (Navy)
-  static const Color primaryLightColor = Color(0xFF7F9FB4); // Biru Muda Pucat
+  static const Color accentColor = Color(0xFFE75636);
+  static const Color backgroundColorOnboarding = Color(0xFF223546);
+  static const Color primaryLightColor = Color(0xFF7F9FB4);
 
   // --- Page View Controller & State ---
   final PageController _pageController = PageController(initialPage: 0);
@@ -74,18 +71,10 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     );
   }
 
-  // --- Widget Logo ---
-  // Warna primaryLightColor dibutuhkan di sini untuk teks JTI
-// Pastikan variabel primaryLightColor di atas tersedia di scope class Anda.
-// static const Color primaryLightColor = Color(0xFF7F9FB4);
-
   Widget _buildLogoHeader({double logoSize = 150, bool isFullText = false}) {
-    // --- SKALA DARI UKURAN DASAR LOGO (DIAMBIL DARI LOGIN: 150) ---
-    // Gunakan 150 sebagai referensi dasar skala.
     const double baseLogoSize = 90.0;
     final double scaleFactor = logoSize / baseLogoSize;
 
-    // --- Ukuran yang diskalakan (Diambil dari proporsi login 180x180) ---
     final double finalStackSize = 180.0 * scaleFactor;
     final double bgBelakangWidth = 120.0 * scaleFactor;
     final double bgDepanWidth = 112.0 * scaleFactor;
@@ -106,7 +95,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           child: Stack(
             alignment: Alignment.center,
             children: [
-              // 1. Background Biru (Bg Belakang) - DIGESER
+              // Background Biru (Bg Belakang)
               Positioned(
                 top: offsetTopBelakang,
                 right: offsetRightBelakang,
@@ -116,7 +105,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                 ),
               ),
 
-              // 2. Background Putih (Bg Depan) - DIGESER
+              // Background Putih (Bg Depan)
               Positioned(
                 bottom: offsetBottomDepan,
                 child: Image.asset(
@@ -125,7 +114,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                 ),
               ),
 
-              // 3. Logo Utama - Tetap di tengah (Di atas Bg Depan)
+              // Logo Utama di tengah
               Image.asset("assets/logosipres.png", width: logoUtamaWidth),
             ],
           ),
@@ -189,15 +178,13 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       required String subtitle,
       required String description}) {
     return SingleChildScrollView(
-      // Bungkus konten dalam Padding
       padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 20),
-
       child: Column(
         mainAxisAlignment: MainAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
           const SizedBox(height: 50),
-          // 1. Header Logo (Ukuran besar)
+          // Header Logo
           _buildLogoHeader(logoSize: 130),
 
           const SizedBox(height: 30),

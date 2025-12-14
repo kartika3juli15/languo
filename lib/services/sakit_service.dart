@@ -12,25 +12,22 @@ class SakitService {
     required String fileName,
     required String userId,
   }) async {
+    // ===== VALIDASI EKSTENSI (WAJIB PDF) =====
+    final ext = fileName.split('.').last.toLowerCase();
+    if (ext != 'pdf') {
+      throw Exception("Lampiran sakit wajib berupa file PDF");
+    }
+
     final timestamp = DateTime.now().millisecondsSinceEpoch;
     final cleanFileName = fileName.replaceAll(" ", "_");
 
     final storagePath = 'sakit_lampiran/$userId/${timestamp}_$cleanFileName';
     final ref = _storage.ref().child(storagePath);
 
-    String ext = fileName.split(".").last.toLowerCase();
-    final contentTypes = {
-      "jpg": "image/jpeg",
-      "jpeg": "image/jpeg",
-      "png": "image/png",
-      "pdf": "application/pdf",
-      "doc": "application/msword",
-      "docx":
-          "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-    };
-    String contentType = contentTypes[ext] ?? "application/octet-stream";
+    final metadata = SettableMetadata(
+      contentType: "application/pdf",
+    );
 
-    final metadata = SettableMetadata(contentType: contentType);
     await ref.putData(bytes, metadata);
     final url = await ref.getDownloadURL();
 
@@ -52,6 +49,11 @@ class SakitService {
     DateTime? tanggalVerifikasi,
   }) async {
     try {
+      final ext = fileName.split('.').last.toLowerCase();
+      if (ext != 'pdf') {
+        throw Exception("Lampiran wajib berupa file PDF");
+      }
+      
       // Ambil data user
       final userDoc = await FirebaseFirestore.instance
           .collection("users")

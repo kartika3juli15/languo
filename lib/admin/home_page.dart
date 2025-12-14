@@ -23,8 +23,6 @@ class HomeAdmin extends StatefulWidget {
 class _HomeAdminState extends State<HomeAdmin> {
   String? _lastScannedData;
   Map<String, int> _statistikData = {
-    'tepatWaktu': 0,
-    'terlambat': 0,
     'izin': 0,
     'sakit': 0,
     'cuti': 0,
@@ -43,205 +41,77 @@ class _HomeAdminState extends State<HomeAdmin> {
     setState(() => _isLoadingStats = true);
 
     try {
-      int tepatWaktu = 0;
-      int terlambat = 0;
       int kehadiran = 0;
       int izin = 0;
       int sakit = 0;
       int cuti = 0;
 
-      debugPrint('=== LOADING STATISTIK untuk $_selectedRole ===');
-
-      // 1. Hitung data absensi berdasarkan role
-      final absensiSnapshot =
-          await FirebaseFirestore.instance.collection('absensi').get();
-
-      debugPrint('Total dokumen absensi: ${absensiSnapshot.docs.length}');
+      // Hitung data absensi berdasarkan role
+      final absensiSnapshot = await FirebaseFirestore.instance
+          .collection('absensi')
+          .where('status', isEqualTo: 'Hadir')
+          .get();
 
       for (var doc in absensiSnapshot.docs) {
         final data = doc.data();
 
-        debugPrint('--- Processing absensi doc: ${doc.id} ---');
-        debugPrint('Raw data: $data');
+        final userId = (data['user_id'] ?? '').toString();
+        if (userId.isEmpty) continue;
 
-        // Coba ambil user_id dengan berbagai kemungkinan
-        final userIdRaw = data['user_id'];
-        debugPrint('user_id raw type: ${userIdRaw.runtimeType}');
-        debugPrint('user_id raw value: "$userIdRaw"');
-
-        String userId = '';
-        if (userIdRaw is int) {
-          userId = userIdRaw.toString();
-        } else if (userIdRaw is String) {
-          userId = userIdRaw;
-        } else {
-          userId = userIdRaw?.toString() ?? '';
-        }
-
-        debugPrint('user_id setelah konversi: "$userId"');
-
-        if (userId.isEmpty) {
-          debugPrint('Skip: user_id kosong');
-          continue;
-        }
-
-        // Cek role user berdasarkan user_id
         final userRole = await _getUserRoleByUserId(userId);
+        if (userRole != _selectedRole) continue;
 
-        debugPrint('Role yang ditemukan: $userRole, Filter: $_selectedRole');
-
-        if (userRole == null) {
-          debugPrint('❌ User $userId tidak ditemukan di collection manapun');
-          continue;
-        }
-
-        if (userRole != _selectedRole) {
-          debugPrint('Skip: role=$userRole, filter=$_selectedRole');
-          continue;
-        }
-
-        // Ambil check_in_time dan check_out_time (Timestamp dari Firestore)
-        final checkInTimestamp = data['check_in_time'] as Timestamp?;
-        final checkOutTimestamp = data['check_out_time'] as Timestamp?;
-
-        debugPrint('check_in_time: $checkInTimestamp');
-        debugPrint('check_out_time: $checkOutTimestamp');
-
-        if (checkInTimestamp == null || checkOutTimestamp == null) {
-          debugPrint('Skip: check_in_time atau check_out_time null');
-          continue;
-        }
-
-        final checkInTime = checkInTimestamp.toDate();
-        final checkOutTime = checkOutTimestamp.toDate();
-
-        // Hitung kehadiran (yang sudah check in DAN check out)
         kehadiran++;
-        debugPrint('✓ Kehadiran++ untuk user $userId: Total = $kehadiran');
-
-        // Hitung tepat waktu vs terlambat (berdasarkan jam check in)
-        try {
-          final hour = checkInTime.hour;
-          final minute = checkInTime.minute;
-
-          debugPrint(
-              'Check in time: ${hour.toString().padLeft(2, '0')}:${minute.toString().padLeft(2, '0')}');
-
-          // Tepat waktu jika sebelum atau sama dengan 07:30
-          if (hour < 7 || (hour == 7 && minute <= 30)) {
-            tepatWaktu++;
-            debugPrint('✓ Tepat Waktu: Total = $tepatWaktu');
-          } else {
-            terlambat++;
-            debugPrint('✓ Terlambat: Total = $terlambat');
-          }
-        } catch (e) {
-          debugPrint('Error parsing time: $e');
-        }
       }
 
-      debugPrint(
-          'Hasil Absensi: Kehadiran=$kehadiran, Tepat Waktu=$tepatWaktu, Terlambat=$terlambat');
-
-      // 2. Hitung izin yang disetujui
-      debugPrint('--- Mengecek Izin ---');
       final izinSnapshot = await FirebaseFirestore.instance
           .collection('pengajuan_izin')
           .where('status', isEqualTo: 'Disetujui')
           .get();
 
-      debugPrint(
-          'Total izin dengan status Disetujui: ${izinSnapshot.docs.length}');
-
       for (var doc in izinSnapshot.docs) {
         final data = doc.data();
         var userRole = (data['user_role'] ?? '').toString().trim();
-        final userName = data['user_name'] ?? '';
-
-        // Normalisasi role ke lowercase
         userRole = userRole.toLowerCase();
-
-        debugPrint(
-            'Izin - User: $userName, Role: "$userRole", Filter: "$_selectedRole"');
-
         if (userRole == _selectedRole) {
           izin++;
-          debugPrint('✓ Izin MATCH! Total: $izin');
-        } else {
-          debugPrint('✗ Izin TIDAK MATCH (role tidak sama)');
-        }
+        } else {}
       }
 
-      // 3. Hitung sakit yang disetujui
-      debugPrint('--- Mengecek Sakit ---');
       final sakitSnapshot = await FirebaseFirestore.instance
           .collection('pengajuan_sakit')
           .where('status', isEqualTo: 'Disetujui')
           .get();
 
-      debugPrint(
-          'Total sakit dengan status Disetujui: ${sakitSnapshot.docs.length}');
-
       for (var doc in sakitSnapshot.docs) {
         final data = doc.data();
         var userRole = (data['user_role'] ?? '').toString().trim();
-        final userName = data['user_name'] ?? '';
-
-        // Normalisasi role ke lowercase
         userRole = userRole.toLowerCase();
-
-        debugPrint(
-            'Sakit - User: $userName, Role: "$userRole", Filter: "$_selectedRole"');
 
         if (userRole == _selectedRole) {
           sakit++;
-          debugPrint('✓ Sakit MATCH! Total: $sakit');
-        } else {
-          debugPrint('✗ Sakit TIDAK MATCH (role tidak sama)');
-        }
+        } else {}
       }
 
-      // 4. Hitung cuti yang disetujui
-      debugPrint('--- Mengecek Cuti ---');
       final cutiSnapshot = await FirebaseFirestore.instance
           .collection('pengajuan_cuti')
           .where('status', isEqualTo: 'Disetujui')
           .get();
 
-      debugPrint(
-          'Total cuti dengan status Disetujui: ${cutiSnapshot.docs.length}');
-
       for (var doc in cutiSnapshot.docs) {
         final data = doc.data();
         var userRole = (data['user_role'] ?? '').toString().trim();
-        final userName = data['user_name'] ?? '';
 
         // Normalisasi role ke lowercase
         userRole = userRole.toLowerCase();
 
-        debugPrint(
-            'Cuti - User: $userName, Role: "$userRole", Filter: "$_selectedRole"');
-
         if (userRole == _selectedRole) {
           cuti++;
-          debugPrint('✓ Cuti MATCH! Total: $cuti');
-        } else {
-          debugPrint('✗ Cuti TIDAK MATCH (role tidak sama)');
-        }
+        } else {}
       }
-
-      debugPrint('=== HASIL AKHIR STATISTIK ($_selectedRole) ===');
-      debugPrint('Kehadiran: $kehadiran');
-      debugPrint('Tepat Waktu: $tepatWaktu');
-      debugPrint('Terlambat: $terlambat');
-      debugPrint('Izin: $izin');
-      debugPrint('Sakit: $sakit');
-      debugPrint('Cuti: $cuti');
 
       setState(() {
         _statistikData = {
-          'tepatWaktu': tepatWaktu,
-          'terlambat': terlambat,
           'izin': izin,
           'sakit': sakit,
           'cuti': cuti,
@@ -250,35 +120,29 @@ class _HomeAdminState extends State<HomeAdmin> {
         _isLoadingStats = false;
       });
     } catch (e) {
-      debugPrint('❌ Error loading statistik: $e');
       setState(() => _isLoadingStats = false);
     }
   }
 
-  // Fungsi untuk mendapatkan role berdasarkan user_id (menggunakan document ID)
+  // Fungsi untuk mendapatkan role berdasarkan user_id
   Future<String?> _getUserRoleByUserId(String userId) async {
     try {
-      // Cek di collection dosen berdasarkan document ID
       var doc = await FirebaseFirestore.instance
           .collection('dosen')
           .doc(userId)
           .get();
       if (doc.exists) {
-        debugPrint('✓ User $userId ditemukan di collection DOSEN');
         return 'dosen';
       }
 
-      // Cek di collection karyawan berdasarkan document ID
       doc = await FirebaseFirestore.instance
           .collection('karyawan')
           .doc(userId)
           .get();
       if (doc.exists) {
-        debugPrint('✓ User $userId ditemukan di collection KARYAWAN');
         return 'karyawan';
       }
 
-      // Cek di collection users berdasarkan document ID (fallback)
       doc = await FirebaseFirestore.instance
           .collection('users')
           .doc(userId)
@@ -286,60 +150,10 @@ class _HomeAdminState extends State<HomeAdmin> {
       if (doc.exists) {
         final data = doc.data() as Map<String, dynamic>;
         final role = (data['user_role'] ?? 'karyawan').toString().toLowerCase();
-        debugPrint(
-            '✓ User $userId ditemukan di collection USERS dengan role: $role');
         return role;
       }
-
-      debugPrint('✗ User $userId TIDAK DITEMUKAN di collection manapun');
       return null;
     } catch (e) {
-      debugPrint('❌ Error getting user role for $userId: $e');
-      return null;
-    }
-  }
-
-  Future<String?> _getUserRole(String userId) async {
-    if (userId.isEmpty) return null;
-
-    try {
-      // Cek di collection dosen
-      var doc = await FirebaseFirestore.instance
-          .collection('dosen')
-          .doc(userId)
-          .get();
-      if (doc.exists) {
-        debugPrint('✓ User $userId ditemukan di collection DOSEN');
-        return 'dosen';
-      }
-
-      // Cek di collection karyawan
-      doc = await FirebaseFirestore.instance
-          .collection('karyawan')
-          .doc(userId)
-          .get();
-      if (doc.exists) {
-        debugPrint('✓ User $userId ditemukan di collection KARYAWAN');
-        return 'karyawan';
-      }
-
-      // Cek di collection users
-      doc = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(userId)
-          .get();
-      if (doc.exists) {
-        final data = doc.data() as Map<String, dynamic>;
-        final role = (data['user_role'] ?? 'karyawan').toString().toLowerCase();
-        debugPrint(
-            '✓ User $userId ditemukan di collection USERS dengan role: $role');
-        return role;
-      }
-
-      debugPrint('✗ User $userId TIDAK DITEMUKAN di collection manapun');
-      return null;
-    } catch (e) {
-      debugPrint('❌ Error getting user role for $userId: $e');
       return null;
     }
   }
@@ -356,69 +170,6 @@ class _HomeAdminState extends State<HomeAdmin> {
     if (!doc.exists) return null;
 
     return UserModel.fromFirestore(doc);
-  }
-
-  void _showRoleFilterDialog() {
-    showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        return Dialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
-          ),
-          child: Container(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Text(
-                  'Pilih Role',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(height: 20),
-                ListTile(
-                  leading: Radio<String>(
-                    value: 'dosen',
-                    groupValue: _selectedRole,
-                    onChanged: (value) {
-                      setState(() => _selectedRole = value!);
-                      Navigator.pop(context);
-                      _loadStatistikData();
-                    },
-                  ),
-                  title: const Text('Dosen'),
-                  onTap: () {
-                    setState(() => _selectedRole = 'dosen');
-                    Navigator.pop(context);
-                    _loadStatistikData();
-                  },
-                ),
-                ListTile(
-                  leading: Radio<String>(
-                    value: 'karyawan',
-                    groupValue: _selectedRole,
-                    onChanged: (value) {
-                      setState(() => _selectedRole = value!);
-                      Navigator.pop(context);
-                      _loadStatistikData();
-                    },
-                  ),
-                  title: const Text('Karyawan'),
-                  onTap: () {
-                    setState(() => _selectedRole = 'karyawan');
-                    Navigator.pop(context);
-                    _loadStatistikData();
-                  },
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
   }
 
   @override
@@ -445,8 +196,8 @@ class _HomeAdminState extends State<HomeAdmin> {
                 const SizedBox(height: 40),
                 _buildAktivitasChart(),
                 const SizedBox(height: 20),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 16),
                   child: Text(
                     "Detail",
                     style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
@@ -474,8 +225,6 @@ class _HomeAdminState extends State<HomeAdmin> {
     }
 
     final total = _statistikData['kehadiran']! +
-        _statistikData['tepatWaktu']! +
-        _statistikData['terlambat']! +
         _statistikData['izin']! +
         _statistikData['sakit']! +
         _statistikData['cuti']!;
@@ -507,34 +256,22 @@ class _HomeAdminState extends State<HomeAdmin> {
           color: const Color(0xFF5B9BD5),
         ),
         _buildDetailBar(
-          title: "Tepat Waktu",
-          value: _statistikData['tepatWaktu']! / total,
-          count: _statistikData['tepatWaktu']!,
-          color: const Color(0xFF4CAF50),
-        ),
-        _buildDetailBar(
-          title: "Terlambat",
-          value: _statistikData['terlambat']! / total,
-          count: _statistikData['terlambat']!,
-          color: const Color(0xFFFFA500),
-        ),
-        _buildDetailBar(
           title: "Izin",
           value: _statistikData['izin']! / total,
           count: _statistikData['izin']!,
-          color: const Color(0xFFFFD966),
+          color: const Color(0xFFFFA500),
         ),
         _buildDetailBar(
           title: "Sakit",
           value: _statistikData['sakit']! / total,
           count: _statistikData['sakit']!,
-          color: const Color(0xFFFF6B6B),
+          color: const Color(0xFF4CAF50),
         ),
         _buildDetailBar(
           title: "Cuti",
           value: _statistikData['cuti']! / total,
           count: _statistikData['cuti']!,
-          color: const Color(0xFF9C27B0),
+          color: const Color(0xFFFF6B6B),
         ),
       ],
     );
@@ -545,7 +282,7 @@ class _HomeAdminState extends State<HomeAdmin> {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: Container(
-        padding: EdgeInsets.all(16),
+        padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
           color: Colors.green[50],
           borderRadius: BorderRadius.circular(12),
@@ -553,8 +290,8 @@ class _HomeAdminState extends State<HomeAdmin> {
         ),
         child: Row(
           children: [
-            Icon(Icons.check_circle, color: Colors.green, size: 24),
-            SizedBox(width: 12),
+            const Icon(Icons.check_circle, color: Colors.green, size: 24),
+            const SizedBox(width: 12),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -566,7 +303,7 @@ class _HomeAdminState extends State<HomeAdmin> {
                       color: Colors.green[800],
                     ),
                   ),
-                  SizedBox(height: 4),
+                  const SizedBox(height: 4),
                   Text(
                     _lastScannedData ?? "",
                     style: TextStyle(
@@ -580,7 +317,7 @@ class _HomeAdminState extends State<HomeAdmin> {
               ),
             ),
             IconButton(
-              icon: Icon(Icons.close, size: 20),
+              icon: const Icon(Icons.close, size: 20),
               onPressed: () {
                 if (!mounted) return;
                 setState(() => _lastScannedData = null);
@@ -606,7 +343,7 @@ class _HomeAdminState extends State<HomeAdmin> {
               BoxShadow(
                 color: Colors.black.withOpacity(0.1),
                 blurRadius: 10,
-                offset: Offset(0, -2),
+                offset: const Offset(0, -2),
               ),
             ],
           ),
@@ -614,7 +351,7 @@ class _HomeAdminState extends State<HomeAdmin> {
             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             children: [
               _bottomItem(Icons.home, "Beranda", true, () {}),
-              SizedBox(width: 80),
+              const SizedBox(width: 80),
               _bottomItem(Icons.person_outline, "Profile", false, () {
                 Navigator.push(
                   context,
@@ -630,25 +367,25 @@ class _HomeAdminState extends State<HomeAdmin> {
             onTap: () async {
               await Navigator.push(
                 context,
-                MaterialPageRoute(builder: (context) => BuatQRPage()),
+                MaterialPageRoute(builder: (context) => const BuatQRPage()),
               );
             },
             child: Container(
               width: 70,
               height: 70,
               decoration: BoxDecoration(
-                color: Color(0xFF36546C),
+                color: const Color(0xFF36546C),
                 shape: BoxShape.circle,
                 boxShadow: [
                   BoxShadow(
                     color: Colors.black.withOpacity(0.2),
                     blurRadius: 15,
-                    offset: Offset(0, 5),
+                    offset: const Offset(0, 5),
                   ),
                 ],
                 border: Border.all(color: Colors.white, width: 4),
               ),
-              child: Center(
+              child: const Center(
                 child: Icon(Icons.add, color: Colors.white, size: 38),
               ),
             ),
@@ -668,14 +405,14 @@ class _HomeAdminState extends State<HomeAdmin> {
         children: [
           Icon(
             icon,
-            color: active ? Color(0xFF36546C) : Colors.grey[400],
+            color: active ? const Color(0xFF36546C) : Colors.grey[400],
             size: 26,
           ),
           const SizedBox(height: 4),
           Text(
             label,
             style: TextStyle(
-              color: active ? Color(0xFF36546C) : Colors.grey[400],
+              color: active ? const Color(0xFF36546C) : Colors.grey[400],
               fontSize: 11,
               fontWeight: active ? FontWeight.w600 : FontWeight.w400,
             ),
@@ -709,12 +446,12 @@ class _HomeAdminState extends State<HomeAdmin> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text("HAI!",
+                    const Text("HAI!",
                         style: TextStyle(color: Colors.white, fontSize: 12)),
                     const SizedBox(height: 4),
                     Text(
                       user?.userName ?? "-",
-                      style: TextStyle(
+                      style: const TextStyle(
                         color: Colors.white,
                         fontSize: 20,
                         fontWeight: FontWeight.w700,
@@ -723,7 +460,7 @@ class _HomeAdminState extends State<HomeAdmin> {
                     const SizedBox(height: 2),
                     Text(
                       user?.userRole ?? "-",
-                      style: TextStyle(
+                      style: const TextStyle(
                         color: Colors.white70,
                         fontSize: 11,
                       ),
@@ -767,11 +504,11 @@ class _HomeAdminState extends State<HomeAdmin> {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Container(
-        padding: EdgeInsets.symmetric(vertical: 20),
+        padding: const EdgeInsets.symmetric(vertical: 20),
         decoration: BoxDecoration(
-          color: Color(0xFFE3E3E3),
+          color: const Color(0xFFE3E3E3),
           borderRadius: BorderRadius.circular(20),
-          boxShadow: [
+          boxShadow: const [
             BoxShadow(
               color: Colors.black12,
               blurRadius: 6,
@@ -819,13 +556,13 @@ class _HomeAdminState extends State<HomeAdmin> {
         children: [
           CircleAvatar(
             radius: 32,
-            backgroundColor: Color(0xFF2C6E91),
+            backgroundColor: const Color(0xFF2C6E91),
             child: Icon(icon, color: Colors.white, size: 30),
           ),
           const SizedBox(height: 8),
           Text(
             label,
-            style: TextStyle(
+            style: const TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w600,
               color: Colors.black87,
@@ -854,7 +591,7 @@ class _HomeAdminState extends State<HomeAdmin> {
               BoxShadow(
                 color: Colors.black.withOpacity(0.1),
                 blurRadius: 15,
-                offset: Offset(0, 5),
+                offset: const Offset(0, 5),
               ),
             ],
           ),
@@ -872,7 +609,7 @@ class _HomeAdminState extends State<HomeAdmin> {
                 ],
               ),
               const SizedBox(height: 16),
-              Text(
+              const Text(
                 "07:00 - 17:00",
                 style: TextStyle(
                   fontWeight: FontWeight.bold,
@@ -889,7 +626,6 @@ class _HomeAdminState extends State<HomeAdmin> {
                         builder: (_) => const UserManagementPage()),
                   );
                 },
-                icon: const Icon(Icons.add, size: 20),
                 label: const Text(
                   "Manajemen User",
                   style: TextStyle(
@@ -924,12 +660,12 @@ class _HomeAdminState extends State<HomeAdmin> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
+              const Text(
                 "Aktivitas keseluruhan",
                 style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
               ),
               if (_isLoadingStats)
-                SizedBox(
+                const SizedBox(
                   width: 20,
                   height: 20,
                   child: CircularProgressIndicator(strokeWidth: 2),
@@ -943,7 +679,7 @@ class _HomeAdminState extends State<HomeAdmin> {
             decoration: BoxDecoration(
               color: Colors.white,
               borderRadius: BorderRadius.circular(16),
-              boxShadow: [
+              boxShadow: const [
                 BoxShadow(
                   color: Colors.black12,
                   blurRadius: 8,
@@ -1063,19 +799,20 @@ class _HomeAdminState extends State<HomeAdmin> {
                   shape: BoxShape.circle,
                 ),
               ),
-              SizedBox(width: 8),
+              const SizedBox(width: 8),
               Text(
                 title,
-                style: TextStyle(
+                style: const TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w600,
                   color: Colors.black87,
                 ),
               ),
-              Spacer(),
+              const Spacer(),
               Text(
                 "${(value * 100).toStringAsFixed(1)}%",
-                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                style:
+                    const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
               ),
             ],
           ),
@@ -1105,16 +842,12 @@ class DonutChartPainter extends CustomPainter {
     final paint = Paint()..style = PaintingStyle.stroke;
     final center = Offset(size.width / 2, size.height / 2);
     final radius = math.min(size.width, size.height) / 2 - 40;
-    final strokeWidth = 35.0;
+    const strokeWidth = 35.0;
 
     paint.strokeWidth = strokeWidth;
 
-    final total = data['kehadiran']! +
-        data['tepatWaktu']! +
-        data['terlambat']! +
-        data['izin']! +
-        data['sakit']! +
-        data['cuti']!;
+    final total =
+        data['kehadiran']! + data['izin']! + data['sakit']! + data['cuti']!;
 
     if (total == 0) {
       // Tampilkan circle kosong jika tidak ada data
@@ -1147,8 +880,6 @@ class DonutChartPainter extends CustomPainter {
 
     final values = [
       data['kehadiran']! / total,
-      data['tepatWaktu']! / total,
-      data['terlambat']! / total,
       data['izin']! / total,
       data['sakit']! / total,
       data['cuti']! / total,
@@ -1156,20 +887,9 @@ class DonutChartPainter extends CustomPainter {
 
     final colors = [
       const Color(0xFF5B9BD5), // Kehadiran - Biru
-      const Color(0xFF4CAF50), // Tepat Waktu - Hijau
-      const Color(0xFFFFA500), // Terlambat - Orange
-      const Color(0xFFFFD966), // Izin - Kuning
-      const Color(0xFFFF6B6B), // Sakit - Merah Muda
-      const Color(0xFF9C27B0), // Cuti - Ungu
-    ];
-
-    final labels = [
-      'Kehadiran',
-      'Tepat Waktu',
-      'Terlambat',
-      'Izin',
-      'Sakit',
-      'Cuti'
+      const Color(0xFFFFA500), // izin- Orange
+      const Color(0xFF4CAF50), // sakit - Hijau
+      const Color(0xFFFF6B6B), // Cuti - Merah Muda
     ];
 
     double startAngle = -math.pi / 2; // Mulai dari atas

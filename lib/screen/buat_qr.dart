@@ -2,9 +2,9 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
 import 'package:flutter/material.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:intl/intl.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class BuatQRPage extends StatefulWidget {
   const BuatQRPage({super.key});
@@ -14,20 +14,16 @@ class BuatQRPage extends StatefulWidget {
 }
 
 class _BuatQRPageState extends State<BuatQRPage> {
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-
   String qrData = "";
   Timer? timer;
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
   @override
   void initState() {
     super.initState();
     _refreshQR();
 
-    timer = Timer.periodic(
-      const Duration(seconds: 10),
-      (t) => _refreshQR(),
-    );
+    timer = Timer.periodic(const Duration(seconds: 10), (t) => _refreshQR());
   }
 
   @override
@@ -48,66 +44,41 @@ class _BuatQRPageState extends State<BuatQRPage> {
   }
 
   // ======================================================
-  // CEK STATUS USER: BELUM CHECK IN, SUDAH, DLL
-  Future<String> _getSession() async {
-    final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
-
-    final snapshot = await _firestore
-        .collection("absensi")
-        .doc("QR_GLOBAL")
-        .collection(today)
-        .get();
-
-    // Tidak pakai user dari sini
-    // sesi berlaku untuk SEMUA user
-    // yang menentukan sesi itu scanner
-
-    return "global"; // QR hanya untuk semua user, sesi ditentukan user saat scan
-  }
-
-  // ======================================================
   // TOKEN UNIK ANTI-CHEAT
   String _generateToken(int length) {
     const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
     final rand = Random.secure();
-    return List.generate(length, (index) => chars[rand.nextInt(chars.length)])
-        .join();
+    return List.generate(
+      length,
+      (index) => chars[rand.nextInt(chars.length)],
+    ).join();
   }
 
   // ======================================================
   // GENERATE QR DENGAN EXPIRED TIME (10 DETIK)
   Future<void> _refreshQR() async {
     try {
-      final snapshot = await _firestore.collection('users').get();
-
-      List<Map<String, dynamic>> users = snapshot.docs.map((doc) {
-        final data = doc.data();
-        return {
-          'user_id': data['user_id'],
-          'user_name': data['user_name'],
-          'user_email': data['user_email'],
-          'user_role': data['user_role'],
-        };
-      }).toList();
-
       final now = DateTime.now();
-      final timestamp = now.toIso8601String();
-      final expiresAt = now.add(const Duration(seconds: 10)).toIso8601String();
+      final expiresAt = now.add(const Duration(seconds: 20));
+      final token = _generateToken(16);
 
-      final token = _generateToken(12); // token anti pemalsuan
+      // SIMPAN TOKEN KE FIRESTORE (BELUM DIPAKAI)
+      await _firestore.collection('qr_tokens').doc(token).set({
+        'used': false,
+        'created_at': FieldValue.serverTimestamp(),
+        'expires_at': Timestamp.fromDate(expiresAt),
+      });
 
       final newQR = jsonEncode({
-        'timestamp': timestamp,
-        'expires_at': expiresAt,
         'token': token,
-        'users': users,
+        'exp': expiresAt.toIso8601String(),
       });
 
       setState(() {
         qrData = newQR;
       });
     } catch (e) {
-      print("ERROR GENERATE QR: $e");
+      debugPrint("ERROR GENERATE QR: $e");
     }
   }
 
@@ -140,9 +111,10 @@ class _BuatQRPageState extends State<BuatQRPage> {
             child: Text(
               "QR Absensi",
               style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 22,
-                  fontWeight: FontWeight.bold),
+                color: Colors.white,
+                fontSize: 22,
+                fontWeight: FontWeight.bold,
+              ),
             ),
           ),
         ],
@@ -165,8 +137,8 @@ class _BuatQRPageState extends State<BuatQRPage> {
           Expanded(
             child: LayoutBuilder(
               builder: (context, constraints) {
-                double qrSize = constraints.maxWidth * 0.55;
-                qrSize = qrSize.clamp(180, 300);
+                double qrSize = constraints.maxWidth * 0.75;
+                qrSize = qrSize.clamp(260, 360);
 
                 return SingleChildScrollView(
                   child: Padding(
@@ -178,7 +150,9 @@ class _BuatQRPageState extends State<BuatQRPage> {
                         Text(
                           "Tanggal : ${DateFormat('dd-MM-yyyy').format(DateTime.now())}",
                           style: const TextStyle(
-                              fontSize: 16, fontWeight: FontWeight.w500),
+                            fontSize: 16,
+                            fontWeight: FontWeight.w500,
+                          ),
                         ),
                         const SizedBox(height: 25),
                         Center(
@@ -187,12 +161,18 @@ class _BuatQRPageState extends State<BuatQRPage> {
                               : QrImageView(
                                   data: qrData,
                                   size: qrSize,
+                                  version: QrVersions.auto,
+                                  gapless: false,
+                                  errorCorrectionLevel: QrErrorCorrectLevel.L,
+                                  backgroundColor: Colors.white,
                                 ),
                         ),
                         const SizedBox(height: 30),
                         Container(
                           padding: const EdgeInsets.symmetric(
-                              horizontal: 30, vertical: 10),
+                            horizontal: 30,
+                            vertical: 10,
+                          ),
                           decoration: BoxDecoration(
                             color: Colors.deepOrange,
                             borderRadius: BorderRadius.circular(20),
@@ -200,9 +180,10 @@ class _BuatQRPageState extends State<BuatQRPage> {
                           child: Text(
                             "Waktu : ${DateFormat('HH:mm:ss').format(DateTime.now())}",
                             style: const TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.white),
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                            ),
                           ),
                         ),
                         const SizedBox(height: 20),

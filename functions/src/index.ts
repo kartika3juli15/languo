@@ -180,3 +180,58 @@ export const deleteUser = functions.https.onCall(async (data, context) => {
     message: `User ${uid} berhasil dihapus`,
   };
 });
+
+// ============================================
+// AUTO DELETE EXPIRED / USED QR TOKEN
+// ============================================
+export const cleanupExpiredQrTokens = functions.pubsub
+  .schedule("every 5 minutes")
+  .timeZone("Asia/Jakarta")
+  .onRun(async () => {
+    const now = admin.firestore.Timestamp.now();
+
+    const snapshot = await db
+      .collection("qr_tokens")
+      .where("expires_at", "<=", now)
+      .get();
+
+    if (snapshot.empty) {
+      logger.info("No expired QR tokens found");
+      return null;
+    }
+
+    const batch = db.batch();
+
+    snapshot.docs.forEach((doc) => {
+      batch.delete(doc.ref);
+    });
+
+    await batch.commit();
+
+    logger.info(`Deleted ${snapshot.size} expired QR tokens`);
+    return null;
+  }
+);
+
+export const cleanupUsedQrTokens = functions.pubsub
+  .schedule("every 10 minutes")
+  .timeZone("Asia/Jakarta")
+  .onRun(async () => {
+    const snapshot = await db
+      .collection("qr_tokens")
+      .where("used", "==", true)
+      .get();
+
+    if (snapshot.empty) {
+      logger.info("No used QR tokens found");
+      return null;
+    }
+
+    const batch = db.batch();
+    snapshot.docs.forEach((doc) => batch.delete(doc.ref));
+    await batch.commit();
+
+    logger.info(`Deleted ${snapshot.size} used QR tokens`);
+    return null;
+  }
+);

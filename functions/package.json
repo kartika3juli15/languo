@@ -2,8 +2,9 @@
   "name": "functions",
   "description": "Cloud Functions for Firebase",
   "scripts": {
+    "build": "tsc",
     "serve": "firebase emulators:start --only functions",
-    "deploy": "firebase deploy --only functions"
+    "deploy": "npm run build && firebase deploy --only functions"
   },
   "engines": {
     "node": "22"

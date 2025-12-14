@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:url_launcher/url_launcher.dart';
 import 'package:languo/admin/rekapan/sakit_rekapan_admin_page.dart';
 import 'package:languo/admin/pengajuan/sakit_pengajuan_role_page.dart';
 import 'dart:io';
@@ -325,7 +324,7 @@ class _VerifikasiSakitPageState extends State<VerifikasiSakitPage> {
           const Text("Alamat Email :",
               style: TextStyle(fontWeight: FontWeight.bold)),
           Text(data["user_email"] ?? "-",
-              style: TextStyle(color: Colors.black87)),
+              style: const TextStyle(color: Colors.black87)),
 
           const SizedBox(height: 14),
 
@@ -353,7 +352,7 @@ class _VerifikasiSakitPageState extends State<VerifikasiSakitPage> {
                     TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
               ),
               style: ElevatedButton.styleFrom(
-                backgroundColor: Color(0xFFE4572E),
+                backgroundColor: const Color(0xFFE4572E),
               ),
             ),
           ),

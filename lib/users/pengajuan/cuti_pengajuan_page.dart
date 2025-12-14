@@ -192,7 +192,6 @@ class _PengajuanCutiPageState extends State<PengajuanCutiPage> {
       initialDate: init,
       firstDate: DateTime(2000),
       lastDate: DateTime(2100),
-      // Menerapkan pembatasan hari
       selectableDayPredicate: _isSelectableDay,
     );
     if (picked != null) {
@@ -205,15 +204,24 @@ class _PengajuanCutiPageState extends State<PengajuanCutiPage> {
   Future<void> pickLampiran() async {
     final result = await FilePicker.platform.pickFiles(
       type: FileType.custom,
-      allowedExtensions: ['jpg', 'jpeg', 'png', 'pdf', 'doc', 'docx'],
+      allowedExtensions: ['pdf'],
       withData: true,
     );
-    if (result != null && result.files.isNotEmpty) {
-      setState(() {
-        lampiranBytes = result.files.first.bytes;
-        lampiranName = result.files.first.name;
-      });
+
+    if (result == null || result.files.isEmpty) return;
+
+    final file = result.files.first;
+    final fileName = file.name.toLowerCase();
+
+    if (!fileName.endsWith('.pdf')) {
+      _showMessage("Lampiran yang diunggah wajib berupa file PDF");
+      return;
     }
+
+    setState(() {
+      lampiranBytes = file.bytes;
+      lampiranName = file.name;
+    });
   }
 
   void removeLampiran() {
@@ -244,7 +252,6 @@ class _PengajuanCutiPageState extends State<PengajuanCutiPage> {
       return false;
     }
 
-    // Hitung jumlah hari kerja (termasuk hari awal dan akhir)
     int totalHariCuti = _hitungHariKerja(startDate!, endDate!, _holidays);
 
     if (totalHariCuti <= 0) {
@@ -264,6 +271,11 @@ class _PengajuanCutiPageState extends State<PengajuanCutiPage> {
       return false;
     }
 
+    if (lampiranName != null && !lampiranName!.toLowerCase().endsWith('.pdf')) {
+      _showMessage("Lampiran yang diunggah wajib berupa file PDF");
+      return false;
+    }
+
     return true;
   }
 
@@ -277,8 +289,6 @@ class _PengajuanCutiPageState extends State<PengajuanCutiPage> {
   Future<bool> submitForm() async {
     try {
       String userId = _auth.currentUser?.uid ?? "unknown";
-
-      final int hariCuti = _hitungHariKerja(startDate!, endDate!, _holidays);
 
       await _cutiService.kirimPengajuan(
         userId: userId,
@@ -321,7 +331,6 @@ class _PengajuanCutiPageState extends State<PengajuanCutiPage> {
   }
 
   // ======================== DIALOGS ========================
-
   void _showConfirmDialog() {
     final int hariCuti = _hitungHariKerja(startDate!, endDate!, _holidays);
     final int sisaNow = sisaCutiSaatPengajuan!.toInt();

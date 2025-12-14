@@ -41,7 +41,9 @@ class _LoginScreenState extends State<LoginScreen> {
     // Tidak isi email + password
     if (email.isEmpty && password.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Belum mengisi email dan password")),
+        const SnackBar(
+            content: Text(
+                "Alamat email dan password wajib diisi untuk melanjutkan.")),
       );
       return;
     }

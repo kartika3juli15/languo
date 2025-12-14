@@ -45,7 +45,7 @@ class _KehadiranPageState extends State<KehadiranPage> {
   String _computeStatus(String checkIn, String checkOut) {
     if (checkIn.isEmpty) return 'Proses';
     if (checkOut.isEmpty) return 'Proses';
-    return 'Sudah Absen';
+    return 'Hadir';
   }
 
   /// IZIN CHECKOUT WAKTU
@@ -54,7 +54,7 @@ class _KehadiranPageState extends State<KehadiranPage> {
     final current = now.hour * 60 + now.minute;
 
     const start = 8 * 60; // 08:00
-    const end = 17 * 60; // 17:00
+    const end = 23 * 60; // 17:00
 
     return current >= start && current <= end;
   }
@@ -69,7 +69,7 @@ class _KehadiranPageState extends State<KehadiranPage> {
 
     await _firestore.collection('absensi').doc(docId).update({
       'check_out': timeNow,
-      'status': 'Sudah Absen',
+      'status': 'Hadir',
       'updated_at': FieldValue.serverTimestamp(),
     });
 
@@ -287,7 +287,7 @@ class _KehadiranPageState extends State<KehadiranPage> {
                   vertical: 6,
                 ),
                 decoration: BoxDecoration(
-                  color: status == "Sudah Absen" ? Colors.green : Colors.orange,
+                  color: status == "Hadir" ? Colors.green : Colors.orange,
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child:

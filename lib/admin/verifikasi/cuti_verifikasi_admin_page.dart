@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:url_launcher/url_launcher.dart';
 import 'package:languo/admin/rekapan/cuti_rekapan_admin_page.dart';
 import 'package:languo/admin/pengajuan/cuti_pengajuan_role_page.dart';
 import 'dart:io';
@@ -68,7 +67,7 @@ class _VerifikasiCutiPageState extends State<VerifikasiCutiPage> {
             color: Colors.white,
             borderRadius: BorderRadius.circular(12),
             border: Border.all(color: Colors.grey.shade300),
-            boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 5)],
+            boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 5)],
           ),
           child: Row(
             children: [
@@ -133,7 +132,7 @@ class _VerifikasiCutiPageState extends State<VerifikasiCutiPage> {
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: Colors.grey.shade300),
-        boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 5)],
+        boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 5)],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -206,7 +205,7 @@ class _VerifikasiCutiPageState extends State<VerifikasiCutiPage> {
                     TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
               ),
               style: ElevatedButton.styleFrom(
-                backgroundColor: Color(0xFFE4572E),
+                backgroundColor: const Color(0xFFE4572E),
               ),
             ),
           ),
@@ -269,7 +268,7 @@ class _VerifikasiCutiPageState extends State<VerifikasiCutiPage> {
                   setState(() => expandedIndex = -1);
                 },
                 style: ElevatedButton.styleFrom(
-                    backgroundColor: Color(0xFF36546C)),
+                    backgroundColor: const Color(0xFF36546C)),
                 child:
                     const Text("TERIMA", style: TextStyle(color: Colors.white)),
               ),
@@ -446,7 +445,7 @@ class _VerifikasiCutiPageState extends State<VerifikasiCutiPage> {
                     width: w,
                     height: 55,
                     decoration: BoxDecoration(
-                      gradient: LinearGradient(
+                      gradient: const LinearGradient(
                           colors: [Colors.deepOrange, Colors.redAccent]),
                       borderRadius: BorderRadius.circular(40),
                     ),
@@ -502,7 +501,7 @@ class _VerifikasiCutiPageState extends State<VerifikasiCutiPage> {
         height: 48,
         padding: const EdgeInsets.symmetric(horizontal: 12),
         decoration: BoxDecoration(
-            color: Color(0xFF9FB0BD), borderRadius: BorderRadius.circular(12)),
+            color: const Color(0xFF9FB0BD), borderRadius: BorderRadius.circular(12)),
         child: Row(
           children: [
             Expanded(
@@ -536,7 +535,7 @@ class _VerifikasiCutiPageState extends State<VerifikasiCutiPage> {
             Container(
                 padding: const EdgeInsets.all(15),
                 decoration:
-                    BoxDecoration(color: Colors.green, shape: BoxShape.circle),
+                    const BoxDecoration(color: Colors.green, shape: BoxShape.circle),
                 child: const Icon(Icons.check, color: Colors.white, size: 45)),
             const SizedBox(height: 20),
             const Text("Pengajuan telah disetujui",
@@ -602,7 +601,7 @@ class _VerifikasiCutiPageState extends State<VerifikasiCutiPage> {
                   child: Container(
                     height: 45,
                     decoration: BoxDecoration(
-                        color: Color(0xFF36546C),
+                        color: const Color(0xFF36546C),
                         borderRadius: BorderRadius.circular(10)),
                     alignment: Alignment.center,
                     child: const Text("Ya",
@@ -629,7 +628,7 @@ class _VerifikasiCutiPageState extends State<VerifikasiCutiPage> {
             Container(
                 padding: const EdgeInsets.all(15),
                 decoration:
-                    BoxDecoration(color: Colors.red, shape: BoxShape.circle),
+                    const BoxDecoration(color: Colors.red, shape: BoxShape.circle),
                 child: const Icon(Icons.close, color: Colors.white, size: 45)),
             const SizedBox(height: 20),
             const Text("Pengajuan telah ditolak",

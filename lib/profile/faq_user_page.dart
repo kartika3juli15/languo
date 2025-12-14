@@ -116,7 +116,7 @@ class _FaqPageState extends State<FaqPage> {
                   fontWeight: FontWeight.bold),
             ),
           ),
-          Positioned(
+          const Positioned(
             right: 16,
             top: 0,
             bottom: 0,
@@ -192,7 +192,7 @@ class _FaqPageState extends State<FaqPage> {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(18),
-        boxShadow: [
+        boxShadow: const [
           BoxShadow(
             color: Colors.black12,
             blurRadius: 10,

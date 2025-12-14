@@ -125,7 +125,7 @@ class _FaqAdminPageState extends State<FaqAdminPage> {
                   fontWeight: FontWeight.bold),
             ),
           ),
-          Positioned(
+          const Positioned(
             right: 16,
             top: 0,
             bottom: 0,
@@ -184,12 +184,12 @@ class _FaqAdminPageState extends State<FaqAdminPage> {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(18),
-        boxShadow: [
+        boxShadow: const [
           BoxShadow(
             color: Colors.black12,
             blurRadius: 10,
             spreadRadius: 1,
-            offset: const Offset(0, 3),
+            offset: Offset(0, 3),
           )
         ],
       ),

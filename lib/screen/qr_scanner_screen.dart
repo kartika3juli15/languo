@@ -14,7 +14,8 @@ class QRScannerPage extends StatefulWidget {
 
 class _QRScannerPageState extends State<QRScannerPage> {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-  bool _isScanned = false;
+  bool _isProcessingScan = false;
+  DateTime? _lastScanTime;
 
   bool _isWithinTimeRange() {
     final now = DateTime.now();
@@ -27,13 +28,14 @@ class _QRScannerPageState extends State<QRScannerPage> {
   Future<Map<String, dynamic>?> _getUserData(String userId) async {
     try {
       final userDoc = await _firestore.collection('users').doc(userId).get();
-      
+
       if (userDoc.exists) {
         final data = userDoc.data() as Map<String, dynamic>;
         return {
           'nama': data['user_name'] ?? data['nama'] ?? 'Tanpa Nama',
           'email': data['user_email'] ?? data['email'] ?? 'Tanpa Email',
-          'role': data['user_role'] ?? 'karyawan', // default karyawan jika kosong
+          'role':
+              data['user_role'] ?? 'karyawan', // default karyawan jika kosong
         };
       }
       return null;
@@ -43,116 +45,120 @@ class _QRScannerPageState extends State<QRScannerPage> {
     }
   }
 
+  final MobileScannerController _scannerController =
+      MobileScannerController(autoStart: true);
+
+  void stopScanner() {
+    _scannerController.stop();
+  }
+
   Future<void> _processQR(String qrText) async {
+    if (_isProcessingScan) return;
+    _isProcessingScan = true;
+
     try {
-      if (!_isWithinTimeRange()) {
-        _showMessage("Di luar jam absensi (07.00 - 17.00)");
-        return;
-      }
-
-      final data = jsonDecode(qrText);
-      final expiresAtStr = data['expires_at'];
-      final token = data['token'];
-      if (expiresAtStr == null || token == null) {
-        _showMessage("QR tidak valid!");
-        return;
-      }
-
-      final expiresAt = DateTime.tryParse(expiresAtStr);
-      if (expiresAt == null || DateTime.now().isAfter(expiresAt)) {
-        _showMessage("QR sudah kedaluwarsa!");
-        return;
-      }
-
-      final user = FirebaseAuth.instance.currentUser;
-      if (user == null) {
-        _showMessage("Anda belum login!");
-        return;
-      }
-
-      final currentUserId = user.uid;
-
-      // ============================================
-      // AMBIL DATA USER (NAMA, EMAIL, ROLE)
-      // ============================================
-      final userData = await _getUserData(currentUserId);
-      if (userData == null) {
-        _showMessage("Data user tidak ditemukan!");
-        return;
-      }
-
       final now = DateTime.now();
-      final dateKey =
-          "${now.year.toString().padLeft(4, '0')}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}";
 
-      final docId = "${currentUserId}_$dateKey";
-      final docRef = _firestore.collection('absensi').doc(docId);
-      final docSnap = await docRef.get();
+      // --- VALIDASI WAKTU ---
+      if (!_isWithinTimeRange()) throw "DI_LUAR_JAM";
 
-      final timeNow =
-          "${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}";
+      // --- PARSE QR ---
+      final data = jsonDecode(qrText);
+      final token = data['token'];
+      if (token == null) throw "QR_TIDAK_VALID";
 
-      bool hasCheckIn =
-          docSnap.exists && (docSnap.data()?['check_in'] ?? '') != '';
-      bool hasCheckOut =
-          docSnap.exists && (docSnap.data()?['check_out'] ?? '') != '';
+      // --- AUTH USER ---
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) throw "BELUM_LOGIN";
 
-      // ===== CHECK-IN =====
-      if (!hasCheckIn) {
-        await docRef.set({
-          "user_id": currentUserId,
-          "nama": userData['nama'],        // ← FIELD BARU
-          "email": userData['email'],      // ← FIELD BARU
-          "role": userData['role'],        // ← FIELD BARU
-          "date": Timestamp.now(),         // ← PAKAI TIMESTAMP
-          "check_in": timeNow,
-          "check_out": "",
-          "status": "Proses",
-          "created_at": FieldValue.serverTimestamp(),
-        }, SetOptions(merge: true));
+      final userId = user.uid;
+      final tokenRef = _firestore.collection('qr_tokens').doc(token);
 
-        _showMessage("Check In berhasil!", goToKehadiran: true);
-        return;
-      }
+      await _firestore.runTransaction((tx) async {
+        final snap = await tx.get(tokenRef);
+        if (!snap.exists) throw "TOKEN_TIDAK_ADA";
 
-      // ===== CHECK-OUT =====
-      if (hasCheckIn && !hasCheckOut) {
-        final checkIn = docSnap.data()?['check_in'] ?? '';
-        String newStatus = 'Tepat Waktu';
+        final tokenData = snap.data()!;
+        final expiresAt = (tokenData['expires_at'] as Timestamp).toDate();
+        final used = tokenData['used'] ?? false;
 
-        if (checkIn.contains(':')) {
-          final parts = checkIn.split(':');
-          final h = int.tryParse(parts[0]) ?? 0;
-          final m = int.tryParse(parts[1]) ?? 0;
-
-          if (h > 8 || (h == 8 && m > 10)) {
-            newStatus = 'Terlambat';
-          }
+        if (DateTime.now().isAfter(expiresAt)) {
+          tx.delete(tokenRef); // hapus token expired langsung
+          throw "TOKEN_EXPIRED";
         }
+        if (used) throw "TOKEN_SUDAH_DIPAKAI";
 
-        await docRef.update({
-          "check_out": timeNow,
-          "status": newStatus,
-          "updated_at": FieldValue.serverTimestamp(),
+        // --- LOCK 1 ABSENSI/HARI ---
+        final dateKey =
+            "${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}";
+        final absensiDocId = "${userId}_$dateKey";
+        final absensiRef = _firestore.collection('absensi').doc(absensiDocId);
+        final absensiSnap = await tx.get(absensiRef);
+
+        final hasCheckIn = absensiSnap.exists &&
+            (absensiSnap.data()?['check_in'] ?? '').isNotEmpty;
+        final hasCheckOut = absensiSnap.exists &&
+            (absensiSnap.data()?['check_out'] ?? '').isNotEmpty;
+        if (hasCheckIn && hasCheckOut) throw "SUDAH_ABSEN_HARI_INI";
+
+        // --- KUNCI TOKEN ---
+        tx.update(tokenRef, {
+          'used': true,
+          'used_by': userId,
+          'used_at': FieldValue.serverTimestamp(),
         });
 
-        _showMessage("Check Out berhasil!", goToKehadiran: true);
-        return;
-      }
+        // --- AMBIL DATA USER ---
+        final userData = await _getUserData(userId);
+        if (userData == null) throw "DATA_USER_TIDAK_DITEMUKAN";
 
-      // ===== SUDAH COMPLETELY ABSEN =====
-      if (hasCheckIn && hasCheckOut) {
-        _showMessage("Anda sudah Check-In dan Check-Out hari ini!");
-        return;
-      }
-    } catch (e) {
-      debugPrint('Error processing QR: $e');
-      _showMessage("QR tidak valid!");
-    } finally {
-      Future.delayed(const Duration(milliseconds: 300), () {
-        if (mounted) {
-          setState(() => _isScanned = false);
+        final timeNow =
+            "${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}";
+
+        // --- ABSENSI ---
+        if (!hasCheckIn) {
+          tx.set(
+              absensiRef,
+              {
+                "user_id": userId,
+                "nama": userData['nama'],
+                "email": userData['email'],
+                "role": userData['role'],
+                "check_in": timeNow,
+                "check_in_at": FieldValue.serverTimestamp(),
+                "status": "Proses",
+                "created_at": FieldValue.serverTimestamp(),
+              },
+              SetOptions(merge: true));
+        } else {
+          tx.update(absensiRef, {
+            "check_out": timeNow,
+            "status": "Hadir",
+            "updated_at": FieldValue.serverTimestamp(),
+          });
         }
+      });
+
+      stopScanner();
+      _showMessage("Absensi berhasil!", goToKehadiran: true);
+    } catch (e) {
+      debugPrint("QR ERROR: $e");
+
+      final errorMap = {
+        "DI_LUAR_JAM": "Di luar jam absensi (07.00 - 17.00)",
+        "QR_TIDAK_VALID": "QR tidak valid",
+        "BELUM_LOGIN": "User belum login",
+        "TOKEN_TIDAK_ADA": "Token QR tidak ditemukan",
+        "TOKEN_SUDAH_DIPAKAI": "QR sudah digunakan",
+        "TOKEN_EXPIRED": "QR sudah kedaluwarsa",
+        "SUDAH_ABSEN_HARI_INI": "Anda sudah absensi hari ini",
+        "DATA_USER_TIDAK_DITEMUKAN": "Data user tidak ditemukan",
+      };
+
+      _showMessage(errorMap[e] ?? "Terjadi kesalahan saat absensi");
+    } finally {
+      Future.delayed(const Duration(seconds: 3), () {
+        _isProcessingScan = false;
       });
     }
   }
@@ -160,25 +166,27 @@ class _QRScannerPageState extends State<QRScannerPage> {
   void _showMessage(String text, {bool goToKehadiran = false}) {
     if (!mounted) return;
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(text),
-        duration: const Duration(seconds: 2),
-      ),
-    );
+    ScaffoldMessenger.of(context)
+      ..clearSnackBars()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(text),
+          duration: const Duration(seconds: 2),
+        ),
+      );
 
-    Future.delayed(const Duration(seconds: 2), () {
-      if (!mounted) return;
+    if (goToKehadiran) {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (_) => const KehadiranPage()),
+      );
+    }
+  }
 
-      if (goToKehadiran) {
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (_) => const KehadiranPage()),
-        );
-      } else {
-        Navigator.pop(context);
-      }
-    });
+  @override
+  void dispose() {
+    _scannerController.dispose();
+    super.dispose();
   }
 
   @override
@@ -189,20 +197,17 @@ class _QRScannerPageState extends State<QRScannerPage> {
         children: [
           MobileScanner(
             onDetect: (capture) {
-              if (_isScanned) return;
-
               final rawValue = capture.barcodes.first.rawValue;
-              if (rawValue != null) {
-                setState(() => _isScanned = true);
-                _processQR(rawValue);
-              }
+              if (rawValue == null) return;
+
+              _processQR(rawValue);
             },
           ),
-          Positioned(
+          const Positioned(
             top: 70,
             left: 0,
             right: 0,
-            child: const Center(
+            child: Center(
               child: Text(
                 "Scan QR Code",
                 style: TextStyle(
@@ -223,11 +228,11 @@ class _QRScannerPageState extends State<QRScannerPage> {
               ),
             ),
           ),
-          Positioned(
+          const Positioned(
             bottom: 110,
             left: 0,
             right: 0,
-            child: const Center(
+            child: Center(
               child: Text(
                 "Pindai Kode QR untuk Absensi",
                 style: TextStyle(

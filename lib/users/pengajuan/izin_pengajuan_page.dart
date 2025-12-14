@@ -65,15 +65,24 @@ class _PengajuanIzinPageState extends State<PengajuanIzinPage> {
   Future<void> pickLampiran() async {
     final result = await FilePicker.platform.pickFiles(
       type: FileType.custom,
-      allowedExtensions: ['jpg', 'jpeg', 'png', 'pdf', 'doc', 'docx'],
+      allowedExtensions: ['pdf'],
       withData: true,
     );
-    if (result != null && result.files.isNotEmpty) {
-      setState(() {
-        lampiranBytes = result.files.first.bytes;
-        lampiranName = result.files.first.name;
-      });
+
+    if (result == null || result.files.isEmpty) return;
+
+    final file = result.files.first;
+    final fileName = file.name.toLowerCase();
+
+    if (!fileName.endsWith('.pdf')) {
+      _showMessage("Lampiran yang diunggah wajib berupa file PDF");
+      return;
     }
+
+    setState(() {
+      lampiranBytes = file.bytes;
+      lampiranName = file.name;
+    });
   }
 
   void removeLampiran() {
@@ -94,9 +103,15 @@ class _PengajuanIzinPageState extends State<PengajuanIzinPage> {
       return false;
     }
     if (lampiranBytes == null || lampiranName == null) {
-      _showMessage("Lampiran belum diupload");
+      _showMessage("Lampiran belum diunggah");
       return false;
     }
+
+    if (!lampiranName!.toLowerCase().endsWith('.pdf')) {
+      _showMessage("Lampiran yang diunggah wajib berupa file PDF");
+      return false;
+    }
+
     return true;
   }
 
@@ -133,7 +148,7 @@ class _PengajuanIzinPageState extends State<PengajuanIzinPage> {
                         _submitFromButton();
                       },
                       style: ElevatedButton.styleFrom(
-                          backgroundColor: Color(0xFF1666A9)),
+                          backgroundColor: const Color(0xFF1666A9)),
                       child: const Text("Ya",
                           style: TextStyle(color: Colors.white)),
                     ),
@@ -143,7 +158,7 @@ class _PengajuanIzinPageState extends State<PengajuanIzinPage> {
                     child: ElevatedButton(
                       onPressed: () => Navigator.of(dialogContext).pop(),
                       style: ElevatedButton.styleFrom(
-                          backgroundColor: Color(0xFFF05454)),
+                          backgroundColor: const Color(0xFFF05454)),
                       child: const Text("Tidak",
                           style: TextStyle(color: Colors.white)),
                     ),

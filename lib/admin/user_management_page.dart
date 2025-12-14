@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:languo/admin/tambah_user_page.dart';
+import 'edit_profile_user.dart';
 
 class UserManagementPage extends StatefulWidget {
   const UserManagementPage({super.key});
@@ -169,13 +170,10 @@ class _UserManagementPageState extends State<UserManagementPage> {
                       (user['user_name'] ?? "").toString().toLowerCase();
                   final email =
                       (user['user_email'] ?? "").toString().toLowerCase();
-                  final role =
-                      (user['user_role'] ?? "").toString().toLowerCase();
 
                   return keyword.isEmpty ||
                       name.contains(keyword) ||
-                      email.contains(keyword) ||
-                      role.contains(keyword);
+                      email.contains(keyword);
                 }).toList();
                 if (filteredUsers.isEmpty) {
                   return const Center(
@@ -232,7 +230,13 @@ class _UserManagementPageState extends State<UserManagementPage> {
                               icon: const Icon(Icons.edit,
                                   color: Colors.blueAccent),
                               onPressed: () {
-                                _showEditUserDialog(user);
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) =>
+                                        EditProfileUserPage(uid: user.id),
+                                  ),
+                                );
                               },
                             ),
                             // START MODIFIKASI HAPUS
@@ -352,214 +356,6 @@ class _UserManagementPageState extends State<UserManagementPage> {
               color: selectedTab == index ? Colors.white : Colors.grey.shade700,
               fontWeight: FontWeight.w600,
             ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  // ======================= EDIT USER =======================
-  void _showEditUserDialog(QueryDocumentSnapshot user) {
-    final nameController = TextEditingController(text: user['user_name'] ?? '');
-    final emailController =
-        TextEditingController(text: user['user_email'] ?? '');
-    final passwordController = TextEditingController();
-    String selectedRole = user['user_role'] ?? 'Karyawan';
-
-    showDialog(
-      context: context,
-      builder: (context) => Dialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        child: SingleChildScrollView(
-          child: StatefulBuilder(
-            builder: (BuildContext context, StateSetter dialogSetState) {
-              return Padding(
-                padding: const EdgeInsets.all(20),
-                child: Column(mainAxisSize: MainAxisSize.min, children: [
-                  const Text(
-                    "Edit User",
-                    style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 18,
-                        color: Color(0xFF1666A9)),
-                  ),
-                  const SizedBox(height: 20),
-
-                  // --- Input Fields ---
-                  TextField(
-                    controller: nameController,
-                    decoration: const InputDecoration(
-                        labelText: "Nama User",
-                        border: OutlineInputBorder(),
-                        contentPadding:
-                            EdgeInsets.symmetric(horizontal: 12, vertical: 12)),
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: emailController,
-                    decoration: const InputDecoration(
-                        labelText: "Email",
-                        border: OutlineInputBorder(),
-                        contentPadding:
-                            EdgeInsets.symmetric(horizontal: 12, vertical: 12)),
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: passwordController,
-                    obscureText: true,
-                    decoration: const InputDecoration(
-                        labelText:
-                            "Password Baru (Kosongkan jika tidak diubah)",
-                        border: OutlineInputBorder(),
-                        contentPadding:
-                            EdgeInsets.symmetric(horizontal: 12, vertical: 12)),
-                  ),
-                  const SizedBox(height: 12),
-
-                  DropdownButtonFormField<String>(
-                    value: selectedRole,
-                    items: const [
-                      DropdownMenuItem(
-                          value: 'Karyawan', child: Text('Karyawan')),
-                      DropdownMenuItem(value: 'Dosen', child: Text('Dosen')),
-                    ],
-                    onChanged: (val) {
-                      dialogSetState(() {
-                        selectedRole = val ?? 'Karyawan';
-                      });
-                    },
-                    decoration: const InputDecoration(
-                        labelText: "Role",
-                        border: OutlineInputBorder(),
-                        contentPadding:
-                            EdgeInsets.symmetric(horizontal: 12, vertical: 4)),
-                  ),
-                  const SizedBox(height: 20),
-
-                  ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF1666A9),
-                      minimumSize: const Size(double.infinity, 45),
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12)),
-                    ),
-                    onPressed: () async {
-                      final newPassword = passwordController.text;
-                      final newName = nameController.text;
-                      final newEmail = emailController.text;
-                      final newRole = selectedRole;
-                      final uid = user.id;
-
-                      final currentName = user['user_name'] ?? '';
-                      final currentEmail = user['user_email'] ?? '';
-                      final currentRole = user['user_role'] ?? '';
-
-                      final Map<String, dynamic> firestoreUpdates = {};
-
-                      if (newName != currentName) {
-                        firestoreUpdates['user_name'] = newName;
-                      }
-                      if (newRole != currentRole) {
-                        firestoreUpdates['user_role'] = newRole;
-                      }
-
-                      bool emailChanged =
-                          newEmail.toLowerCase() != currentEmail.toLowerCase();
-                      if (emailChanged) {
-                        final emailExist = await FirebaseFirestore.instance
-                            .collection('users')
-                            .where('user_email', isEqualTo: newEmail)
-                            .limit(1)
-                            .get();
-
-                        if (emailExist.docs.isNotEmpty) {
-                          if (!mounted) return;
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                                content: Text(
-                                    "Email sudah digunakan oleh user lain")),
-                          );
-                          return;
-                        }
-                        firestoreUpdates['user_email'] = newEmail;
-                      }
-
-                      if (newPassword.isNotEmpty && newPassword.length < 6) {
-                        if (!mounted) return;
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                              content:
-                                  Text("Password minimal harus 6 karakter")),
-                        );
-                        return;
-                      }
-
-                      if (firestoreUpdates.isEmpty && newPassword.isEmpty) {
-                        if (!mounted) return;
-                        Navigator.pop(context);
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                              content:
-                                  Text("Tidak ada perubahan yang disimpan")),
-                        );
-                        return;
-                      }
-
-                      try {
-                        if (firestoreUpdates.isNotEmpty) {
-                          firestoreUpdates["updated_at"] =
-                              FieldValue.serverTimestamp();
-                          await FirebaseFirestore.instance
-                              .collection('users')
-                              .doc(uid)
-                              .update(firestoreUpdates);
-                        }
-
-                        if (emailChanged) {
-                          await updateUserEmail(uid, newEmail);
-                        }
-
-                        if (newPassword.isNotEmpty) {
-                          await updateUserPassword(uid, newPassword);
-                        }
-
-                        if (mounted) {
-                          Navigator.pop(context);
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                                content:
-                                    Text("Perubahan user berhasil disimpan")),
-                          );
-                          setState(() {});
-                        }
-                      } catch (e) {
-                        if (mounted) {
-                          String errorMessage = "Terjadi kesalahan";
-                          if (e is FirebaseFunctionsException) {
-                            errorMessage = "Error Server: ${e.message}";
-                          } else if (e is Exception) {
-                            errorMessage = e.toString().split(':')[1].trim();
-                          } else {
-                            errorMessage = e.toString();
-                          }
-
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                                content: Text(
-                                    "Gagal menyimpan perubahan: $errorMessage")),
-                          );
-                        }
-                      }
-                    },
-                    child: const Text(
-                      "Simpan Perubahan",
-                      style: TextStyle(
-                          fontWeight: FontWeight.bold, color: Colors.white),
-                    ),
-                  ),
-                ]),
-              );
-            },
           ),
         ),
       ),

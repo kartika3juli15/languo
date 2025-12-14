@@ -13,29 +13,21 @@ class CutiService {
     required String fileName,
     required String userId,
   }) async {
+    // ===== VALIDASI EKSTENSI (WAJIB PDF) =====
+    final ext = fileName.split('.').last.toLowerCase();
+    if (ext != 'pdf') {
+      throw Exception("Lampiran wajib berupa file PDF");
+    }
+
     final timestamp = DateTime.now().millisecondsSinceEpoch;
     final cleanFileName = fileName.replaceAll(" ", "_");
 
     final storagePath = 'cuti_lampiran/$userId/${timestamp}_$cleanFileName';
     final ref = _storage.ref().child(storagePath);
 
-    // Tentukan content type berdasarkan ekstensi file
-    String ext = fileName.split(".").last.toLowerCase();
-    String contentType = "application/octet-stream";
-
-    final contentTypes = {
-      "jpg": "image/jpeg",
-      "jpeg": "image/jpeg",
-      "png": "image/png",
-      "pdf": "application/pdf",
-      "doc": "application/msword",
-      "docx":
-          "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-    };
-
-    contentType = contentTypes[ext] ?? "application/octet-stream";
-
-    final metadata = SettableMetadata(contentType: contentType);
+    final metadata = SettableMetadata(
+      contentType: "application/pdf",
+    );
 
     await ref.putData(bytes, metadata);
     final url = await ref.getDownloadURL();
@@ -59,6 +51,13 @@ class CutiService {
     required num? sisaCutiSaatPengajuan,
   }) async {
     try {
+      if (lampiranBytes != null && fileName != null) {
+        final ext = fileName.split('.').last.toLowerCase();
+        if (ext != 'pdf') {
+          throw Exception("Lampiran wajib berupa file PDF");
+        }
+      }
+
       // Ambil profile user
       final userDoc = await FirebaseFirestore.instance
           .collection("users")

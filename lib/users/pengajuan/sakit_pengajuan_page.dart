@@ -65,16 +65,24 @@ class _PengajuanSakitPageState extends State<PengajuanSakitPage> {
   Future<void> pickLampiran() async {
     final result = await FilePicker.platform.pickFiles(
       type: FileType.custom,
-      allowedExtensions: ['jpg', 'jpeg', 'png', 'pdf', 'doc', 'docx'],
+      allowedExtensions: ['pdf'],
       withData: true,
     );
 
-    if (result != null && result.files.isNotEmpty) {
-      setState(() {
-        lampiranBytes = result.files.first.bytes;
-        lampiranName = result.files.first.name;
-      });
+    if (result == null || result.files.isEmpty) return;
+
+    final file = result.files.first;
+    final fileName = file.name.toLowerCase();
+
+    if (!fileName.endsWith('.pdf')) {
+      _showMessage("Lampiran yang diupload wajib berupa file PDF");
+      return;
     }
+
+    setState(() {
+      lampiranBytes = file.bytes;
+      lampiranName = file.name;
+    });
   }
 
   void removeLampiran() {
@@ -101,9 +109,8 @@ class _PengajuanSakitPageState extends State<PengajuanSakitPage> {
     return true;
   }
 
-  // dipanggil saat tombol Kirim utama ditekan
   void _onKirimPressed() {
-    if (isSubmitted || isLoading) return; // jangan bisa tekan saat loading
+    if (isSubmitted || isLoading) return;
     if (_validateFormShowMessageIfInvalid()) {
       _showConfirmDialog();
     }

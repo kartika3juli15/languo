@@ -12,21 +12,19 @@ class IzinService {
     required String fileName,
     required String userId,
   }) async {
+    final ext = fileName.split(".").last.toLowerCase();
+    if (ext != "pdf") {
+      throw Exception("Lampiran harus berupa file PDF");
+    }
+
     final timestamp = DateTime.now().millisecondsSinceEpoch;
     final cleanFileName = fileName.replaceAll(" ", "_");
 
     final storagePath = 'izin_lampiran/$userId/${timestamp}_$cleanFileName';
     final ref = _storage.ref().child(storagePath);
 
-    String ext = fileName.split(".").last.toLowerCase();
     String contentType = {
-          "jpg": "image/jpeg",
-          "jpeg": "image/jpeg",
-          "png": "image/png",
           "pdf": "application/pdf",
-          "doc": "application/msword",
-          "docx":
-              "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
         }[ext] ??
         "application/octet-stream";
 
@@ -53,6 +51,11 @@ class IzinService {
     DateTime? tanggalVerifikasi,
   }) async {
     try {
+      final ext = fileName.split('.').last.toLowerCase();
+      if (ext != 'pdf') {
+        throw Exception("Lampiran wajib berupa file PDF");
+      }
+
       // Ambil data user
       final userDoc = await _firestore.collection("users").doc(userId).get();
 

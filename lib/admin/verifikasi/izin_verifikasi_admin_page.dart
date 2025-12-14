@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:languo/admin/rekapan/izin_rekapan_admin_page.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:url_launcher/url_launcher.dart';
 import 'package:languo/admin/pengajuan/izin_pengajuan_role_page.dart';
 import 'dart:io';
 import 'package:universal_html/html.dart' as html;
@@ -266,7 +265,7 @@ class _VerifikasiIzinPageState extends State<VerifikasiIzinPage> {
                     TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
               ),
               style: ElevatedButton.styleFrom(
-                backgroundColor: Color(0xFFE4572E),
+                backgroundColor: const Color(0xFFE4572E),
               ),
             ),
           ),
@@ -314,7 +313,7 @@ class _VerifikasiIzinPageState extends State<VerifikasiIzinPage> {
                   setState(() => expandedIndex = -1);
                 },
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: Color(0xFF36546C), // biru gelap
+                  backgroundColor: const Color(0xFF36546C), // biru gelap
                   padding:
                       const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
                   shape: RoundedRectangleBorder(

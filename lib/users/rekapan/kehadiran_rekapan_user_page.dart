@@ -20,7 +20,6 @@ class _KehadiranPageState extends State<KehadiranPage> {
   String _formatDisplayDate(dynamic firestoreDate) {
     try {
       DateTime dt;
-
       if (firestoreDate is Timestamp) {
         dt = firestoreDate.toDate();
       } else if (firestoreDate is String) {
@@ -28,7 +27,6 @@ class _KehadiranPageState extends State<KehadiranPage> {
       } else {
         return firestoreDate.toString();
       }
-
       return DateFormat('EEE, dd MMM yyyy', 'id').format(dt);
     } catch (e) {
       return firestoreDate.toString();
@@ -48,20 +46,48 @@ class _KehadiranPageState extends State<KehadiranPage> {
     return 'Hadir';
   }
 
-  /// IZIN CHECKOUT WAKTU
+  /// CHECK OUT WAKTU VALID
   bool _isCheckOutTime() {
     final now = DateTime.now();
     final current = now.hour * 60 + now.minute;
-
-    const start = 8 * 60; // 08:00
-    const end = 23 * 60; // 17:00
-
-    return current >= start && current <= end;
+    const checkoutStart = 8 * 60; // 08:00
+    const checkoutEnd = 17 * 60; // 17:00
+    return current >= checkoutStart && current <= checkoutEnd;
   }
 
-  /// ============================================
-  /// LOGIKA CHECK OUT – DIPANGGIL SETELAH VALIDASI MAPS
-  /// ============================================
+  /// CHECK OUT KE HALAMAN MAPS → VALIDASI RADIUS
+  Future<void> _goToMapsBeforeCheckout(String docId) async {
+    final result = await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const MapsPage()),
+    );
+
+    if (result == true) {
+      _showCheckOutDialog(docId);
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Anda berada di luar radius 100 meter!'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  /// DIALOG COUNTDOWN CHECK OUT
+  void _showCheckOutDialog(String docId) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => _CountdownDialog(
+        onCheckOut: () async {
+          Navigator.pop(context);
+          await _performCheckOut(docId);
+        },
+      ),
+    );
+  }
+
   Future<void> _performCheckOut(String docId) async {
     final now = DateTime.now();
     final timeNow =
@@ -81,43 +107,14 @@ class _KehadiranPageState extends State<KehadiranPage> {
     );
   }
 
-  void _showCheckOutDialog(String docId) {
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => _CountdownDialog(
-        onCheckOut: () async {
-          Navigator.pop(context);
-          await _performCheckOut(docId);
-        },
-      ),
-    );
+  /// STREAM REKAPAN USER YANG LOGIN
+  Stream<QuerySnapshot> _userAbsensiStream() {
+    return _firestore
+        .collection('absensi')
+        .where("user_id", isEqualTo: currentUserId)
+        .snapshots(); // tanpa orderBy
   }
 
-  /// ============================================
-  /// CHECK OUT → KE HALAMAN MAPS → VALIDASI RADIUS
-  /// ============================================
-  Future<void> _goToMapsBeforeCheckout(String docId) async {
-    final result = await Navigator.push(
-      context,
-      MaterialPageRoute(builder: (_) => const MapsPage()),
-    );
-
-    if (result == true) {
-      // radius valid → lanjut dialog 60 detik
-      _showCheckOutDialog(docId);
-    } else {
-      // radius tidak valid
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Anda berada di luar radius 100 meter!'),
-          backgroundColor: Colors.red,
-        ),
-      );
-    }
-  }
-
-  /// BUILD UI
   @override
   Widget build(BuildContext context) {
     if (currentUserId.isEmpty) {
@@ -125,12 +122,6 @@ class _KehadiranPageState extends State<KehadiranPage> {
         body: Center(child: Text('User belum login')),
       );
     }
-
-    final stream = _firestore
-        .collection('absensi')
-        .where("user_id", isEqualTo: currentUserId)
-        .orderBy('date', descending: true)
-        .snapshots();
 
     return Scaffold(
       backgroundColor: Colors.grey[100],
@@ -141,13 +132,18 @@ class _KehadiranPageState extends State<KehadiranPage> {
             const SizedBox(height: 16),
             Expanded(
               child: StreamBuilder<QuerySnapshot>(
-                stream: stream,
+                stream: _userAbsensiStream(),
                 builder: (context, snapshot) {
                   if (!snapshot.hasData) {
                     return const Center(child: CircularProgressIndicator());
                   }
 
                   final docs = snapshot.data!.docs;
+                  docs.sort((a, b) {
+                    final aTime = a['created_at']?.toDate() ?? DateTime.now();
+                    final bTime = b['created_at']?.toDate() ?? DateTime.now();
+                    return bTime.compareTo(aTime);
+                  });
 
                   if (docs.isEmpty) {
                     return const Center(
@@ -161,11 +157,13 @@ class _KehadiranPageState extends State<KehadiranPage> {
                       final d = docs[index];
                       final data = d.data() as Map<String, dynamic>;
 
+                      // Ambil data check-in/out & tanggal
                       final checkIn = data['check_in'] ?? '';
                       final checkOut = data['check_out'] ?? '';
+                      final dateField = data['date'] ?? data['check_in_at'];
 
                       final status = _computeStatus(checkIn, checkOut);
-                      final tanggal = _formatDisplayDate(data['date']);
+                      final tanggal = _formatDisplayDate(dateField);
 
                       return _buildCard(
                         docId: d.id,
@@ -173,6 +171,9 @@ class _KehadiranPageState extends State<KehadiranPage> {
                         masuk: checkIn,
                         keluar: checkOut,
                         status: status,
+                        date: dateField is Timestamp
+                            ? dateField
+                            : Timestamp.fromDate(DateTime.parse(dateField)),
                       );
                     },
                   );
@@ -230,7 +231,14 @@ class _KehadiranPageState extends State<KehadiranPage> {
     required String keluar,
     required String tanggal,
     required String status,
+    required Timestamp date,
   }) {
+    bool isToday(Timestamp ts) {
+      final d = ts.toDate();
+      final now = DateTime.now();
+      return d.year == now.year && d.month == now.month && d.day == now.day;
+    }
+
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(16),
@@ -277,15 +285,11 @@ class _KehadiranPageState extends State<KehadiranPage> {
               ],
             ),
           ),
-
-          /// BUTTON CHECK OUT
           Column(
             children: [
               Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 6,
-                ),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                 decoration: BoxDecoration(
                   color: status == "Hadir" ? Colors.green : Colors.orange,
                   borderRadius: BorderRadius.circular(12),
@@ -298,9 +302,10 @@ class _KehadiranPageState extends State<KehadiranPage> {
                 width: 120,
                 height: 40,
                 child: ElevatedButton(
-                  onPressed: (status == "Proses" && _isCheckOutTime())
-                      ? () => _goToMapsBeforeCheckout(docId)
-                      : null,
+                  onPressed:
+                      (status == "Proses" && _isCheckOutTime() && isToday(date))
+                          ? () => _goToMapsBeforeCheckout(docId)
+                          : null,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFFE95A3A),
                     disabledBackgroundColor: Colors.grey.shade300,
@@ -328,7 +333,7 @@ class _KehadiranPageState extends State<KehadiranPage> {
 }
 
 /// ===========================================
-/// DIALOG COUNTDOWN
+/// DIALOG COUNTDOWN CHECK OUT
 /// ===========================================
 class _CountdownDialog extends StatefulWidget {
   final VoidCallback onCheckOut;

@@ -6,6 +6,7 @@ import 'package:languo/users/rekapan/sakit_rekapan_user_page.dart';
 import '../../../services/sakit_service.dart';
 import 'package:intl/intl.dart';
 import 'package:languo/users/home_page.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class PengajuanSakitPage extends StatefulWidget {
   final int initialTab;
@@ -26,6 +27,7 @@ class _PengajuanSakitPageState extends State<PengajuanSakitPage> {
     super.initState();
     selectedTab = widget.initialTab;
     Intl.defaultLocale = 'id_ID';
+    loadHolidays();
   }
 
   DateTime? tanggalMulai;
@@ -40,25 +42,96 @@ class _PengajuanSakitPageState extends State<PengajuanSakitPage> {
   bool isSubmitted = false; // setelah sukses true -> tombol utama disable
   bool isLoading = false; // hanya menandakan proses submit sedang berjalan
 
+
+  List<DateTime> _holidays = [];
+  bool isHoliday(DateTime date) {
+    // Normalisasi tanggal yang diperiksa (mengabaikan waktu)
+    final normalizedDate = DateTime(date.year, date.month, date.day);
+    return _holidays.any((h) => h.isAtSameMomentAs(normalizedDate));
+  }
+
+  bool _isSelectableDay(DateTime day) {
+    // blokir Sabtu & Minggu
+    if (day.weekday == DateTime.saturday || day.weekday == DateTime.sunday) {
+      return false;
+    }
+
+    // jika Anda punya fungsi hari libur nasional
+    if (isHoliday(day)) {
+      return false;
+    }
+
+    return true;
+  }
+
+  Future<void> loadHolidays() async {
+    try {
+      final snap =
+          await FirebaseFirestore.instance.collection("holidays").get();
+
+      final List<DateTime> fetchedHolidays = snap.docs.map((d) {
+        final ts = d['date'] as Timestamp;
+        final dt = ts.toDate();
+        // Normalisasi hanya ke tanggal (mengabaikan waktu)
+        return DateTime(dt.year, dt.month, dt.day);
+      }).toList();
+
+      setState(() {
+        _holidays = fetchedHolidays;
+      });
+    } catch (e) {
+      _showMessage("Gagal memuat hari libur: $e");
+    }
+  }
+
+  /// Cari hari kerja terdekat jika hari ini libur
+  DateTime _getNextSelectableDate(DateTime from) {
+    DateTime date = from;
+    while (!_isSelectableDay(date)) {
+      date = date.add(const Duration(days: 1));
+    }
+    return date;
+  }
+
   // ======================== TANGGAL ========================
   Future<void> pickStartDate() async {
+    final now = DateTime.now();
+    final initial = _getNextSelectableDate(tanggalMulai ?? now);
+
     final picked = await showDatePicker(
       context: context,
-      initialDate: tanggalMulai ?? DateTime.now(),
+      initialDate: initial,
       firstDate: DateTime(2000),
       lastDate: DateTime(2100),
+      selectableDayPredicate: _isSelectableDay,
     );
-    if (picked != null) setState(() => tanggalMulai = picked);
+
+    if (picked != null) {
+      setState(() {
+        tanggalMulai = picked;
+
+        // otomatis set tanggal selesai jika kosong atau lebih kecil
+        if (tanggalSelesai == null || tanggalSelesai!.isBefore(picked)) {
+          tanggalSelesai = picked;
+        }
+      });
+    }
   }
 
   Future<void> pickEndDate() async {
+    final initial = _getNextSelectableDate(tanggalSelesai ?? tanggalMulai!);
+
     final picked = await showDatePicker(
       context: context,
-      initialDate: tanggalSelesai ?? (tanggalMulai ?? DateTime.now()),
-      firstDate: DateTime(2000),
+      initialDate: initial,
+      firstDate: tanggalMulai!,
       lastDate: DateTime(2100),
+      selectableDayPredicate: _isSelectableDay,
     );
-    if (picked != null) setState(() => tanggalSelesai = picked);
+
+    if (picked != null) {
+      setState(() => tanggalSelesai = picked);
+    }
   }
 
   // ======================== LAMPIRAN ========================

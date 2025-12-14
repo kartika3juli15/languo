@@ -6,6 +6,7 @@ import '../../../services/izin_service.dart';
 import '../rekapan/izin_rekapan_user_page.dart';
 import 'package:intl/intl.dart';
 import 'package:languo/users/home_page.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class PengajuanIzinPage extends StatefulWidget {
   final int initialTab;
@@ -26,6 +27,7 @@ class _PengajuanIzinPageState extends State<PengajuanIzinPage> {
     super.initState();
     selectedTab = widget.initialTab;
     Intl.defaultLocale = 'id_ID';
+    loadHolidays();
   }
 
   DateTime? tanggalMulai;
@@ -40,25 +42,85 @@ class _PengajuanIzinPageState extends State<PengajuanIzinPage> {
   bool isSubmitted = false;
   bool isLoading = false;
 
+  List<DateTime> _holidays = [];
+
+  Future<void> loadHolidays() async {
+    try {
+      final snap =
+          await FirebaseFirestore.instance.collection("holidays").get();
+
+      final List<DateTime> fetched = snap.docs.map((d) {
+        final ts = d['date'] as Timestamp;
+        final dt = ts.toDate();
+        return DateTime(dt.year, dt.month, dt.day);
+      }).toList();
+
+      setState(() {
+        _holidays = fetched;
+      });
+    } catch (e) {
+      _showMessage("Gagal memuat hari libur");
+    }
+  }
+
+  bool isHoliday(DateTime date) {
+    final normalized = DateTime(date.year, date.month, date.day);
+    return _holidays.any((h) => h.isAtSameMomentAs(normalized));
+  }
+
+  bool _isSelectableDay(DateTime day) {
+    // Sabtu / Minggu
+    if (day.weekday == DateTime.saturday || day.weekday == DateTime.sunday) {
+      return false;
+    }
+
+    // Hari libur nasional
+    if (isHoliday(day)) {
+      return false;
+    }
+
+    return true;
+  }
+
+  DateTime _getNextSelectableDate() {
+    DateTime date = DateTime.now();
+    while (!_isSelectableDay(date)) {
+      date = date.add(const Duration(days: 1));
+    }
+    return date;
+  }
+
   // ======================== TANGGAL ========================
   Future<void> pickStartDate() async {
     final picked = await showDatePicker(
       context: context,
-      initialDate: tanggalMulai ?? DateTime.now(),
+      initialDate: tanggalMulai ?? _getNextSelectableDate(),
       firstDate: DateTime(2000),
       lastDate: DateTime(2100),
+      selectableDayPredicate: _isSelectableDay,
     );
-    if (picked != null) setState(() => tanggalMulai = picked);
+
+    if (picked != null) {
+      setState(() {
+        tanggalMulai = DateTime(picked.year, picked.month, picked.day);
+      });
+    }
   }
 
   Future<void> pickEndDate() async {
     final picked = await showDatePicker(
       context: context,
-      initialDate: tanggalSelesai ?? (tanggalMulai ?? DateTime.now()),
-      firstDate: DateTime(2000),
+      initialDate: tanggalSelesai ?? tanggalMulai ?? _getNextSelectableDate(),
+      firstDate: tanggalMulai ?? DateTime(2000),
       lastDate: DateTime(2100),
+      selectableDayPredicate: _isSelectableDay,
     );
-    if (picked != null) setState(() => tanggalSelesai = picked);
+
+    if (picked != null) {
+      setState(() {
+        tanggalSelesai = DateTime(picked.year, picked.month, picked.day);
+      });
+    }
   }
 
   // ======================== LAMPIRAN ========================

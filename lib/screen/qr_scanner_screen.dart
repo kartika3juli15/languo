@@ -15,7 +15,6 @@ class QRScannerPage extends StatefulWidget {
 class _QRScannerPageState extends State<QRScannerPage> {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   bool _isProcessingScan = false;
-  DateTime? _lastScanTime;
 
   bool _isWithinTimeRange() {
     final now = DateTime.now();
@@ -32,10 +31,9 @@ class _QRScannerPageState extends State<QRScannerPage> {
       if (userDoc.exists) {
         final data = userDoc.data() as Map<String, dynamic>;
         return {
-          'nama': data['user_name'] ?? data['nama'] ?? 'Tanpa Nama',
-          'email': data['user_email'] ?? data['email'] ?? 'Tanpa Email',
-          'role':
-              data['user_role'] ?? 'karyawan', // default karyawan jika kosong
+          'user_name': data['user_name'],
+          'user_email': data['user_email'],
+          'user_role': data['user_role'],
         };
       }
       return null;
@@ -83,7 +81,7 @@ class _QRScannerPageState extends State<QRScannerPage> {
         final used = tokenData['used'] ?? false;
 
         if (DateTime.now().isAfter(expiresAt)) {
-          tx.delete(tokenRef); // hapus token expired langsung
+          tx.delete(tokenRef);
           throw "TOKEN_EXPIRED";
         }
         if (used) throw "TOKEN_SUDAH_DIPAKAI";
@@ -117,30 +115,45 @@ class _QRScannerPageState extends State<QRScannerPage> {
 
         // --- ABSENSI ---
         if (!hasCheckIn) {
+          // check-in berhasil
           tx.set(
               absensiRef,
               {
                 "user_id": userId,
-                "nama": userData['nama'],
-                "email": userData['email'],
-                "role": userData['role'],
+                "user_name": userData['user_name'],
+                "user_email": userData['user_email'],
+                "user_role": userData['user_role'],
                 "check_in": timeNow,
                 "check_in_at": FieldValue.serverTimestamp(),
                 "status": "Proses",
                 "created_at": FieldValue.serverTimestamp(),
               },
               SetOptions(merge: true));
+
+          // Tampilkan pesan berhasil hanya untuk check-in
+          _showMessage("Check in berhasil!", goToKehadiran: true);
         } else {
+          // check-out
+          final checkInAt = absensiSnap.data()?['check_in_at'] as Timestamp?;
+          if (checkInAt == null) throw "CHECK_IN_TIDAK_DITEMUKAN";
+
+          final checkInTime = checkInAt.toDate();
+          final diffMinutes = now.difference(checkInTime).inMinutes;
+
+          if (diffMinutes < 10) {
+            throw "CHECK_OUT_TERLALU_DINI"; // belum 10 menit
+          }
+
+          // check-out berhasil
           tx.update(absensiRef, {
             "check_out": timeNow,
             "status": "Hadir",
             "updated_at": FieldValue.serverTimestamp(),
           });
+
+          _showMessage("Absensi berhasil!", goToKehadiran: true);
         }
       });
-
-      stopScanner();
-      _showMessage("Absensi berhasil!", goToKehadiran: true);
     } catch (e) {
       debugPrint("QR ERROR: $e");
 
@@ -153,6 +166,8 @@ class _QRScannerPageState extends State<QRScannerPage> {
         "TOKEN_EXPIRED": "QR sudah kedaluwarsa",
         "SUDAH_ABSEN_HARI_INI": "Anda sudah absensi hari ini",
         "DATA_USER_TIDAK_DITEMUKAN": "Data user tidak ditemukan",
+        "CHECK_OUT_TERLALU_DINI":
+            "Anda baru saja Check in, Silakan tunggu beberapa saat untuk checkout",
       };
 
       _showMessage(errorMap[e] ?? "Terjadi kesalahan saat absensi");

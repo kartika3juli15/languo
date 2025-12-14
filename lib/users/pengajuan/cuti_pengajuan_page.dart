@@ -79,6 +79,16 @@ class _PengajuanCutiPageState extends State<PengajuanCutiPage> {
     }
   }
 
+  DateTime _getNextSelectableDate() {
+    DateTime date = DateTime.now();
+
+    while (!_isSelectableDay(date)) {
+      date = date.add(const Duration(days: 1));
+    }
+
+    return date;
+  }
+
   Future<void> fetchSisaCuti() async {
     setState(() => isFetchingCuti = true);
     try {
@@ -172,10 +182,9 @@ class _PengajuanCutiPageState extends State<PengajuanCutiPage> {
   Future<void> pickStartDate() async {
     final picked = await showDatePicker(
       context: context,
-      initialDate: startDate ?? DateTime.now(),
+      initialDate: _getNextSelectableDate(),
       firstDate: DateTime(2000),
       lastDate: DateTime(2100),
-      // Menerapkan pembatasan hari
       selectableDayPredicate: _isSelectableDay,
     );
     if (picked != null) {
@@ -186,10 +195,9 @@ class _PengajuanCutiPageState extends State<PengajuanCutiPage> {
   }
 
   Future<void> pickEndDate() async {
-    final init = endDate ?? (startDate ?? DateTime.now());
     final picked = await showDatePicker(
       context: context,
-      initialDate: init,
+      initialDate: _getNextSelectableDate(),
       firstDate: DateTime(2000),
       lastDate: DateTime(2100),
       selectableDayPredicate: _isSelectableDay,

@@ -50,6 +50,15 @@ class _QRScannerPageState extends State<QRScannerPage> {
     _scannerController.stop();
   }
 
+  bool _isCheckoutAllowed(DateTime now) {
+    final minCheckoutTime =
+        DateTime(now.year, now.month, now.day, 8, 0); // 08.00 WIB
+    final maxCheckoutTime =
+        DateTime(now.year, now.month, now.day, 17, 0); // 17.00 WIB
+
+    return now.isAfter(minCheckoutTime) && now.isBefore(maxCheckoutTime);
+  }
+
   Future<void> _processQR(String qrText) async {
     if (_isProcessingScan) return;
     _isProcessingScan = true;
@@ -58,23 +67,23 @@ class _QRScannerPageState extends State<QRScannerPage> {
       final now = DateTime.now();
 
       // --- VALIDASI WAKTU ---
-      if (!_isWithinTimeRange()) throw "DI_LUAR_JAM";
+      if (!_isWithinTimeRange()) throw Exception("DI_LUAR_JAM");
 
       // --- PARSE QR ---
       final data = jsonDecode(qrText);
       final token = data['token'];
-      if (token == null) throw "QR_TIDAK_VALID";
+      if (token == null) throw Exception("QR_TIDAK_VALID");
 
       // --- AUTH USER ---
       final user = FirebaseAuth.instance.currentUser;
-      if (user == null) throw "BELUM_LOGIN";
+      if (user == null) throw Exception("BELUM_LOGIN");
 
       final userId = user.uid;
       final tokenRef = _firestore.collection('qr_tokens').doc(token);
 
       await _firestore.runTransaction((tx) async {
         final snap = await tx.get(tokenRef);
-        if (!snap.exists) throw "TOKEN_TIDAK_ADA";
+        if (!snap.exists) throw Exception("TOKEN_TIDAK_ADA");
 
         final tokenData = snap.data()!;
         final expiresAt = (tokenData['expires_at'] as Timestamp).toDate();
@@ -82,9 +91,9 @@ class _QRScannerPageState extends State<QRScannerPage> {
 
         if (DateTime.now().isAfter(expiresAt)) {
           tx.delete(tokenRef);
-          throw "TOKEN_EXPIRED";
+          throw Exception("TOKEN_EXPIRED");
         }
-        if (used) throw "TOKEN_SUDAH_DIPAKAI";
+        if (used) throw Exception("TOKEN_SUDAH_DIPAKAI");
 
         // --- LOCK 1 ABSENSI/HARI ---
         final dateKey =
@@ -97,7 +106,7 @@ class _QRScannerPageState extends State<QRScannerPage> {
             (absensiSnap.data()?['check_in'] ?? '').isNotEmpty;
         final hasCheckOut = absensiSnap.exists &&
             (absensiSnap.data()?['check_out'] ?? '').isNotEmpty;
-        if (hasCheckIn && hasCheckOut) throw "SUDAH_ABSEN_HARI_INI";
+        if (hasCheckIn && hasCheckOut) throw Exception("SUDAH_ABSEN_HARI_INI");
 
         // --- KUNCI TOKEN ---
         tx.update(tokenRef, {
@@ -108,7 +117,7 @@ class _QRScannerPageState extends State<QRScannerPage> {
 
         // --- AMBIL DATA USER ---
         final userData = await _getUserData(userId);
-        if (userData == null) throw "DATA_USER_TIDAK_DITEMUKAN";
+        if (userData == null) throw Exception("DATA_USER_TIDAK_DITEMUKAN");
 
         final timeNow =
             "${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}";
@@ -133,25 +142,32 @@ class _QRScannerPageState extends State<QRScannerPage> {
           // Tampilkan pesan berhasil hanya untuk check-in
           _showMessage("Check in berhasil!", goToKehadiran: true);
         } else {
-          // check-out
+          // ================= CHECK OUT =================
           final checkInAt = absensiSnap.data()?['check_in_at'] as Timestamp?;
-          if (checkInAt == null) throw "CHECK_IN_TIDAK_DITEMUKAN";
+          if (checkInAt == null) throw Exception("CHECK_IN_TIDAK_DITEMUKAN");
 
+          // VALIDASI JAM MINIMAL CHECK OUT (>= 08.00)
+          if (!_isCheckoutAllowed(now)) {
+            throw Exception("CHECK_OUT_DI_LUAR_JAM");
+          }
+
+          // VALIDASI SELISIH WAKTU DARI CHECK IN
           final checkInTime = checkInAt.toDate();
           final diffMinutes = now.difference(checkInTime).inMinutes;
 
           if (diffMinutes < 10) {
-            throw "CHECK_OUT_TERLALU_DINI"; // belum 10 menit
+            throw Exception("CHECK_OUT_TERLALU_DINI");
           }
 
-          // check-out berhasil
+          // CHECK OUT BERHASIL
           tx.update(absensiRef, {
             "check_out": timeNow,
+            "check_out_at": FieldValue.serverTimestamp(),
             "status": "Hadir",
             "updated_at": FieldValue.serverTimestamp(),
           });
 
-          _showMessage("Absensi berhasil!", goToKehadiran: true);
+          _showMessage("Check out berhasil!", goToKehadiran: true);
         }
       });
     } catch (e) {
@@ -168,6 +184,8 @@ class _QRScannerPageState extends State<QRScannerPage> {
         "DATA_USER_TIDAK_DITEMUKAN": "Data user tidak ditemukan",
         "CHECK_OUT_TERLALU_DINI":
             "Anda baru saja Check in, Silakan tunggu beberapa saat untuk checkout",
+        "CHECK_OUT_DI_LUAR_JAM":
+            "Check out hanya dapat dilakukan setelah pukul 08.00 WIB",
       };
 
       _showMessage(errorMap[e] ?? "Terjadi kesalahan saat absensi");

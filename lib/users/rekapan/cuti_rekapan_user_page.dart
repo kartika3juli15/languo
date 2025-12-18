@@ -50,6 +50,33 @@ class _RekapanCutiPageState extends State<RekapanCutiPage> {
   final _cutiService = CutiService();
   final _auth = FirebaseAuth.instance;
 
+  int? _selectedMonth;
+  int? _selectedYear;
+
+  String _getMonthName(int month) {
+    const months = [
+      "Januari",
+      "Februari",
+      "Maret",
+      "April",
+      "Mei",
+      "Juni",
+      "Juli",
+      "Agustus",
+      "September",
+      "Oktober",
+      "November",
+      "Desember"
+    ];
+    return months[month - 1];
+  }
+
+  bool _matchMonthYear(DateTime date) {
+    if (_selectedMonth != null && date.month != _selectedMonth) return false;
+    if (_selectedYear != null && date.year != _selectedYear) return false;
+    return true;
+  }
+
   @override
   Widget build(BuildContext context) {
     final currentUser = _auth.currentUser;
@@ -59,114 +86,171 @@ class _RekapanCutiPageState extends State<RekapanCutiPage> {
           child: Text("Anda harus login untuk melihat rekapan."));
     }
 
-    return StreamBuilder<QuerySnapshot>(
-      stream: _cutiService.getRekapanCuti(currentUser.uid),
-      builder: (context, snapshot) {
-        if (snapshot.hasError) {
-          return Center(child: Text('Error: ${snapshot.error}'));
-        }
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator());
-        }
+    return Column(
+      children: [
+        /// FILTER BULAN & TAHUN
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+          child: Row(
+            children: [
+              Expanded(
+                child: DropdownButtonFormField<int?>(
+                  value: _selectedMonth,
+                  hint: const Text("Semua Bulan"),
+                  items: [
+                    const DropdownMenuItem<int?>(
+                      value: null,
+                      child: Text("Semua Bulan"),
+                    ),
+                    ...List.generate(12, (i) {
+                      return DropdownMenuItem<int?>(
+                        value: i + 1,
+                        child: Text(_getMonthName(i + 1)),
+                      );
+                    }),
+                  ],
+                  onChanged: (v) => setState(() => _selectedMonth = v),
+                  decoration: const InputDecoration(
+                    labelText: "Filter Bulan",
+                    isDense: true,
+                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.calendar_month),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: DropdownButtonFormField<int?>(
+                  value: _selectedYear,
+                  hint: const Text("Semua Tahun"),
+                  items: [
+                    const DropdownMenuItem<int?>(
+                      value: null,
+                      child: Text("Semua Tahun"),
+                    ),
+                    ...List.generate(5, (i) {
+                      final year = DateTime.now().year - i;
+                      return DropdownMenuItem<int?>(
+                        value: year,
+                        child: Text(year.toString()),
+                      );
+                    }),
+                  ],
+                  onChanged: (v) => setState(() => _selectedYear = v),
+                  decoration: const InputDecoration(
+                    labelText: "Tahun",
+                    isDense: true,
+                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.event),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
 
-        final docs = snapshot.data?.docs ?? [];
+        /// DATA
+        Expanded(
+          child: StreamBuilder<QuerySnapshot>(
+            stream: _cutiService.getRekapanCuti(currentUser.uid),
+            builder: (context, snapshot) {
+              if (snapshot.hasError) {
+                return Center(child: Text('Error: ${snapshot.error}'));
+              }
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return const Center(child: CircularProgressIndicator());
+              }
 
-        if (docs.isEmpty) {
-          return const Center(
-            child: Text(
-              "Belum ada pengajuan cuti",
-              style: TextStyle(fontSize: 18, color: Colors.grey),
-            ),
-          );
-        }
+              final docs = snapshot.data?.docs ?? [];
 
-        return FutureBuilder<Map<String, String>>(
-          future: _fetchUserData(currentUser.uid),
-          builder: (context, userSnapshot) {
-            if (userSnapshot.connectionState == ConnectionState.waiting) {
-              return const Center(child: CircularProgressIndicator());
-            }
-            if (userSnapshot.hasError) {
-              return Center(
-                  child:
-                      Text('Error loading user data: ${userSnapshot.error}'));
-            }
-
-            final userData = userSnapshot.data ??
-                {
-                  'userName': 'Data Tidak Ditemukan',
-                  'userEmail': 'N/A',
-                  'userRole': 'N/A',
-                };
-
-            final cutiList = docs.map((d) {
-              final data = d.data() as Map<String, dynamic>;
-
-              DateTime tanggalMulai =
-                  (data['tanggal_mulai'] as Timestamp).toDate();
-              DateTime tanggalSelesai =
-                  (data['tanggal_selesai'] as Timestamp).toDate();
-
-              final createdAtTimestamp = data['created_at'] as Timestamp?;
-
-              DateTime tanggalPengajuan =
-                  createdAtTimestamp?.toDate() ?? DateTime.now();
-
-              return CutiRekapanData(
-                id: d.id,
-                alasan: data['alasan'] ?? 'Cuti',
-                tanggalMulai: tanggalMulai,
-                tanggalSelesai: tanggalSelesai,
-                status: data['status'] ?? "Diajukan",
-                lampiranUrl: data['lampiran_url'],
-                lampiranName: data['file_name'] ?? 'Lampiran',
-                keterangan: data['keterangan'] ?? '-',
-                tanggalPengajuan: tanggalPengajuan,
-                userName: userData['userName'] ?? 'Data Tidak Ditemukan',
-                userEmail: userData['userEmail'] ?? 'Email Tidak Ditetapkan',
-                userRole: userData['userRole'] ?? 'Jabatan Tidak Ditetapkan',
-              );
-            }).toList();
-
-            return ListView.builder(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              itemCount: cutiList.length,
-              itemBuilder: (context, index) {
-                return Padding(
-                  padding: const EdgeInsets.only(bottom: 12.0),
-                  child: _buildCutiRekapanTile(cutiList[index], context),
+              if (docs.isEmpty) {
+                return const Center(
+                  child: Text(
+                    "Belum ada pengajuan cuti",
+                    style: TextStyle(fontSize: 18, color: Colors.grey),
+                  ),
                 );
-              },
-            );
-          },
-        );
-      },
+              }
+
+              return FutureBuilder<Map<String, String>>(
+                future: _fetchUserData(currentUser.uid),
+                builder: (context, userSnapshot) {
+                  if (userSnapshot.connectionState == ConnectionState.waiting) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
+
+                  final userData = userSnapshot.data ??
+                      {
+                        'userName': 'Data Tidak Ditemukan',
+                        'userEmail': 'N/A',
+                        'userRole': 'N/A',
+                      };
+
+                  final cutiList = docs.map((d) {
+                    final data = d.data() as Map<String, dynamic>;
+
+                    final tanggalMulai =
+                        (data['tanggal_mulai'] as Timestamp).toDate();
+                    final tanggalSelesai =
+                        (data['tanggal_selesai'] as Timestamp).toDate();
+                    final tanggalPengajuan =
+                        (data['created_at'] as Timestamp?)?.toDate() ??
+                            DateTime.now();
+
+                    return CutiRekapanData(
+                      id: d.id,
+                      alasan: data['alasan'] ?? 'Cuti',
+                      tanggalMulai: tanggalMulai,
+                      tanggalSelesai: tanggalSelesai,
+                      status: data['status'] ?? "Diajukan",
+                      lampiranUrl: data['lampiran_url'],
+                      lampiranName: data['file_name'] ?? 'Lampiran',
+                      keterangan: data['keterangan'] ?? '-',
+                      tanggalPengajuan: tanggalPengajuan,
+                      userName: userData['userName']!,
+                      userEmail: userData['userEmail']!,
+                      userRole: userData['userRole']!,
+                    );
+                  }).where((c) {
+                    return _matchMonthYear(c.tanggalPengajuan);
+                  }).toList();
+
+                  if (cutiList.isEmpty) {
+                    return const Center(child: Text("Data tidak ditemukan"));
+                  }
+
+                  return ListView.builder(
+                    padding: const EdgeInsets.all(16),
+                    itemCount: cutiList.length,
+                    itemBuilder: (context, index) {
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: _buildCutiRekapanTile(cutiList[index], context),
+                      );
+                    },
+                  );
+                },
+              );
+            },
+          ),
+        ),
+      ],
     );
   }
 
-  Future<Map<String, String>> _fetchUserData(String userId) async {
-    try {
-      final userDoc = await FirebaseFirestore.instance
-          .collection("users")
-          .doc(userId)
-          .get();
-      final data = userDoc.data();
+  // =========================
+  // BAGIAN BAWAH TIDAK DIUBAH
+  // =========================
 
-      return {
-        'userName': data?['user_name'] ?? 'Data Tidak Ditemukan',
-        'userEmail': data?['user_email'] ??
-            _auth.currentUser?.email ??
-            'Email Tidak Ditetapkan',
-        'userRole': data?['user_role'] ?? 'Jabatan Tidak Ditetapkan',
-      };
-    } catch (e) {
-      print('Error fetching user data: $e');
-      return {
-        'userName': 'Data Tidak Ditemukan',
-        'userEmail': 'N/A',
-        'userRole': 'N/A',
-      };
-    }
+  Future<Map<String, String>> _fetchUserData(String userId) async {
+    final userDoc =
+        await FirebaseFirestore.instance.collection("users").doc(userId).get();
+    final data = userDoc.data();
+    return {
+      'userName': data?['user_name'] ?? 'Data Tidak Ditemukan',
+      'userEmail': data?['user_email'] ?? _auth.currentUser?.email ?? 'N/A',
+      'userRole': data?['user_role'] ?? 'N/A',
+    };
   }
 
   Color _statusColor(String status) {

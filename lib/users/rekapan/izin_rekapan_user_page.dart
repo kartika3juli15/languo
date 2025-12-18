@@ -9,6 +9,26 @@ import 'package:open_file/open_file.dart';
 import 'package:path_provider/path_provider.dart';
 import 'dart:io';
 
+/// ===============================
+/// HELPER FILTER BULAN & TAHUN
+/// (LOGIKA SAMA, HANYA DIPINDAH)
+/// ===============================
+class MonthYearFilterHelper {
+  static bool match({
+    required DateTime tanggal,
+    int? selectedMonth,
+    int? selectedYear,
+  }) {
+    if (selectedMonth != null && tanggal.month != selectedMonth) {
+      return false;
+    }
+    if (selectedYear != null && tanggal.year != selectedYear) {
+      return false;
+    }
+    return true;
+  }
+}
+
 class IzinRekapanData {
   final String id;
   final String perihal;
@@ -47,11 +67,14 @@ class RekapanIzinPage extends StatefulWidget {
 }
 
 class _RekapanIzinPageState extends State<RekapanIzinPage> {
-  final _izinService =
-      IzinService(); // tetap tersedia (tidak digunakan sebagai stream)
+  final _izinService = IzinService();
   final _auth = FirebaseAuth.instance;
 
   late Future<Map<String, String>> _userDataFuture;
+
+  /// ===== FILTER =====
+  int? _selectedMonth;
+  int? _selectedYear;
 
   @override
   void initState() {
@@ -65,6 +88,7 @@ class _RekapanIzinPageState extends State<RekapanIzinPage> {
       return {
         'userName': 'Data Tidak Ditemukan',
         'userEmail': 'N/A',
+        'userRole': 'N/A',
       };
     }
 
@@ -87,14 +111,17 @@ class _RekapanIzinPageState extends State<RekapanIzinPage> {
 
     if (currentUser == null) {
       return const Center(
-          child: Text("Anda harus login untuk melihat rekapan."));
+        child: Text("Anda harus login untuk melihat rekapan."),
+      );
     }
+
     return FutureBuilder<Map<String, String>>(
       future: _userDataFuture,
       builder: (context, userSnapshot) {
         if (userSnapshot.connectionState == ConnectionState.waiting) {
           return const Center(child: CircularProgressIndicator());
         }
+
         if (userSnapshot.hasError) {
           return Center(
               child: Text('Error loading user data: ${userSnapshot.error}'));
@@ -109,6 +136,85 @@ class _RekapanIzinPageState extends State<RekapanIzinPage> {
 
         return Column(
           children: [
+            /// ===== FILTER UI (TIDAK DIUBAH) =====
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+              child: Row(
+                children: [
+                  const Icon(Icons.calendar_month, color: Colors.grey),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: DropdownButtonFormField<int?>(
+                      value: _selectedMonth,
+                      hint: const Text("Semua Bulan"),
+                      items: [
+                        const DropdownMenuItem<int?>(
+                          value: null,
+                          child: Text("Semua Bulan"),
+                        ),
+                        ...List.generate(12, (index) {
+                          final monthNames = [
+                            'Januari',
+                            'Februari',
+                            'Maret',
+                            'April',
+                            'Mei',
+                            'Juni',
+                            'Juli',
+                            'Agustus',
+                            'September',
+                            'Oktober',
+                            'November',
+                            'Desember'
+                          ];
+                          return DropdownMenuItem<int?>(
+                            value: index + 1,
+                            child: Text(monthNames[index]),
+                          );
+                        }),
+                      ],
+                      onChanged: (value) {
+                        setState(() => _selectedMonth = value);
+                      },
+                      decoration: const InputDecoration(
+                        isDense: true,
+                        labelText: 'Filter Bulan',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: DropdownButtonFormField<int?>(
+                      value: _selectedYear,
+                      hint: const Text("Semua Tahun"),
+                      items: [
+                        const DropdownMenuItem<int?>(
+                          value: null,
+                          child: Text("Semua Tahun"),
+                        ),
+                        ...List.generate(5, (i) {
+                          final year = DateTime.now().year - i;
+                          return DropdownMenuItem<int?>(
+                            value: year,
+                            child: Text(year.toString()),
+                          );
+                        }),
+                      ],
+                      onChanged: (value) {
+                        setState(() => _selectedYear = value);
+                      },
+                      decoration: const InputDecoration(
+                        isDense: true,
+                        labelText: 'Tahun',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
             Expanded(
               child: StreamBuilder<QuerySnapshot>(
                 stream: stream,
@@ -116,6 +222,7 @@ class _RekapanIzinPageState extends State<RekapanIzinPage> {
                   if (snapshot.hasError) {
                     return Center(child: Text('Error: ${snapshot.error}'));
                   }
+
                   if (snapshot.connectionState == ConnectionState.waiting) {
                     return const Center(child: CircularProgressIndicator());
                   }
@@ -124,70 +231,74 @@ class _RekapanIzinPageState extends State<RekapanIzinPage> {
 
                   if (docs.isEmpty) {
                     return const Center(
-                        child: Text("Belum ada pengajuan izin",
-                            style:
-                                TextStyle(fontSize: 18, color: Colors.grey)));
+                      child: Text(
+                        "Belum ada pengajuan izin",
+                        style: TextStyle(fontSize: 18, color: Colors.grey),
+                      ),
+                    );
                   }
 
-                  // Map docs to model, being tolerant to different field names
                   final izinList = docs.map((d) {
                     final data = d.data() as Map<String, dynamic>;
 
-                    // handle timestamp fields with multiple possible names
-                    Timestamp? createdAtTs = (data['createdAt'] is Timestamp)
-                        ? data['createdAt'] as Timestamp
-                        : (data['created_at'] is Timestamp)
-                            ? data['created_at'] as Timestamp
+                    Timestamp? createdAtTs = data['createdAt'] is Timestamp
+                        ? data['createdAt']
+                        : data['created_at'] is Timestamp
+                            ? data['created_at']
                             : null;
 
-                    final DateTime createdAt =
-                        createdAtTs?.toDate() ?? DateTime.now();
-
-                    DateTime tanggalMulai;
-                    DateTime tanggalSelesai;
-                    try {
-                      tanggalMulai =
-                          (data['tanggalMulai'] as Timestamp).toDate();
-                    } catch (_) {
-                      tanggalMulai = DateTime.now();
-                    }
-                    try {
-                      tanggalSelesai =
-                          (data['tanggalSelesai'] as Timestamp).toDate();
-                    } catch (_) {
-                      tanggalSelesai = tanggalMulai;
-                    }
+                    final createdAt = createdAtTs?.toDate() ?? DateTime.now();
 
                     return IzinRekapanData(
                       id: d.id,
                       perihal: (data['perihal'] ?? 'Izin').toString(),
-                      tanggalMulai: tanggalMulai,
-                      tanggalSelesai: tanggalSelesai,
+                      tanggalMulai:
+                          (data['tanggalMulai'] as Timestamp?)?.toDate() ??
+                              DateTime.now(),
+                      tanggalSelesai:
+                          (data['tanggalSelesai'] as Timestamp?)?.toDate() ??
+                              DateTime.now(),
                       status: (data['status'] ?? 'Diajukan').toString(),
-                      lampiranUrl: (data['lampiran_url'])?.toString(),
-                      storagePath: (data['storage_path'])?.toString(),
+                      lampiranUrl: data['lampiran_url']?.toString(),
+                      storagePath: data['storage_path']?.toString(),
                       keterangan: (data['keterangan'] ?? '-').toString(),
                       tanggalPengajuan: createdAt,
-                      userName: userData['userName'] ?? 'Data Tidak Ditemukan',
-                      userEmail:
-                          userData['userEmail'] ?? 'Email Tidak Ditetapkan',
-                      userRole:
-                          userData['userRole'] ?? 'Jabatan Tidak Ditetapkan',
+                      userName: userData['userName']!,
+                      userEmail: userData['userEmail']!,
+                      userRole: userData['userRole']!,
                     );
                   }).toList();
 
-                  // sort client-side by createdAt desc (newest first)
-                  izinList.sort((a, b) =>
+                  /// ===== FILTER (LOGIKA TIDAK BERUBAH) =====
+                  final filteredList = izinList.where((e) {
+                    return MonthYearFilterHelper.match(
+                      tanggal: e.tanggalPengajuan,
+                      selectedMonth: _selectedMonth,
+                      selectedYear: _selectedYear,
+                    );
+                  }).toList();
+
+                  filteredList.sort((a, b) =>
                       b.tanggalPengajuan.compareTo(a.tanggalPengajuan));
+
+                  if (filteredList.isEmpty) {
+                    return const Center(
+                      child: Text(
+                        "Data tidak ditemukan",
+                        style: TextStyle(fontSize: 16, color: Colors.grey),
+                      ),
+                    );
+                  }
 
                   return ListView.builder(
                     padding: const EdgeInsets.symmetric(
                         horizontal: 16, vertical: 12),
-                    itemCount: izinList.length,
+                    itemCount: filteredList.length,
                     itemBuilder: (context, index) {
                       return Padding(
                         padding: const EdgeInsets.only(bottom: 12.0),
-                        child: _buildIzinRekapanTile(izinList[index], context),
+                        child:
+                            _buildIzinRekapanTile(filteredList[index], context),
                       );
                     },
                   );

@@ -1,9 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'dart:async';
 import 'package:intl/intl.dart';
-import 'package:languo/screen/maps.dart';
 
 class KehadiranPage extends StatefulWidget {
   const KehadiranPage({super.key});
@@ -18,8 +16,13 @@ class _KehadiranPageState extends State<KehadiranPage> {
 
   final TextEditingController _searchController = TextEditingController();
   String _searchText = '';
-  int? _selectedMonth;
 
+  int? _selectedMonth;
+  int? _selectedYear;
+
+  /// ===============================
+  /// HELPER
+  /// ===============================
   String _formatDisplayDate(dynamic firestoreDate) {
     try {
       DateTime dt;
@@ -56,6 +59,42 @@ class _KehadiranPageState extends State<KehadiranPage> {
         .snapshots();
   }
 
+  String _getMonthName(int month) {
+    const months = [
+      "Januari",
+      "Februari",
+      "Maret",
+      "April",
+      "Mei",
+      "Juni",
+      "Juli",
+      "Agustus",
+      "September",
+      "Oktober",
+      "November",
+      "Desember"
+    ];
+    return months[month - 1];
+  }
+
+  bool _matchMonthYear(dynamic dateField) {
+    DateTime dt;
+    if (dateField is Timestamp) {
+      dt = dateField.toDate();
+    } else if (dateField is String) {
+      dt = DateTime.parse(dateField);
+    } else {
+      return false;
+    }
+
+    if (_selectedMonth != null && dt.month != _selectedMonth) return false;
+    if (_selectedYear != null && dt.year != _selectedYear) return false;
+    return true;
+  }
+
+  /// ===============================
+  /// UI
+  /// ===============================
   @override
   Widget build(BuildContext context) {
     if (currentUserId.isEmpty) {
@@ -91,41 +130,68 @@ class _KehadiranPageState extends State<KehadiranPage> {
               ),
             ),
 
-            const SizedBox(height: 6),
+            const SizedBox(height: 8),
 
-            /// FILTER ICON
+            /// FILTER BULAN & TAHUN (SESUAI GAMBAR)
             Padding(
-              padding: const EdgeInsets.only(right: 16),
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
               child: Row(
-                mainAxisAlignment: MainAxisAlignment.end,
                 children: [
-                  PopupMenuButton<int?>(
-                    icon: Icon(
-                      Icons.filter_alt_outlined,
-                      color:
-                          _selectedMonth != null ? Colors.orange : Colors.grey,
-                    ),
-                    onSelected: (v) => setState(() => _selectedMonth = v),
-                    itemBuilder: (context) => [
-                      const PopupMenuItem<int?>(
-                        value: null,
-                        child: Text("Semua Bulan"),
+                  Expanded(
+                    child: DropdownButtonFormField<int?>(
+                      value: _selectedMonth,
+                      hint: const Text("Semua Bulan"),
+                      items: [
+                        const DropdownMenuItem<int?>(
+                          value: null,
+                          child: Text("Semua Bulan"),
+                        ),
+                        ...List.generate(12, (i) {
+                          return DropdownMenuItem<int?>(
+                            value: i + 1,
+                            child: Text(_getMonthName(i + 1)),
+                          );
+                        }),
+                      ],
+                      onChanged: (v) => setState(() => _selectedMonth = v),
+                      decoration: const InputDecoration(
+                        isDense: true,
+                        labelText: "Filter Bulan",
+                        border: OutlineInputBorder(),
+                        prefixIcon: Icon(Icons.calendar_month),
                       ),
-                      ...List.generate(12, (i) {
-                        return PopupMenuItem<int?>(
-                          value: i + 1,
-                          child: Text(
-                            DateFormat.MMMM('id').format(DateTime(0, i + 1)),
-                          ),
-                        );
-                      }),
-                    ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: DropdownButtonFormField<int?>(
+                      value: _selectedYear,
+                      hint: const Text("Semua Tahun"),
+                      items: [
+                        const DropdownMenuItem<int?>(
+                          value: null,
+                          child: Text("Semua Tahun"),
+                        ),
+                        ...List.generate(5, (i) {
+                          final year = DateTime.now().year - i;
+                          return DropdownMenuItem<int?>(
+                            value: year,
+                            child: Text(year.toString()),
+                          );
+                        }),
+                      ],
+                      onChanged: (v) => setState(() => _selectedYear = v),
+                      decoration: const InputDecoration(
+                        isDense: true,
+                        labelText: "Tahun",
+                        border: OutlineInputBorder(),
+                        prefixIcon: Icon(Icons.event),
+                      ),
+                    ),
                   ),
                 ],
               ),
             ),
-
-            const SizedBox(height: 8),
 
             /// LIST
             Expanded(
@@ -144,16 +210,11 @@ class _KehadiranPageState extends State<KehadiranPage> {
                     return bTime.compareTo(aTime);
                   });
 
-                  if (_selectedMonth != null) {
-                    docs = docs.where((d) {
-                      final data = d.data() as Map<String, dynamic>;
-                      final dateField = data['date'] ?? data['check_in_at'];
-                      final dt = dateField is Timestamp
-                          ? dateField.toDate()
-                          : DateTime.parse(dateField);
-                      return dt.month == _selectedMonth;
-                    }).toList();
-                  }
+                  docs = docs.where((d) {
+                    final data = d.data() as Map<String, dynamic>;
+                    final dateField = data['date'] ?? data['check_in_at'];
+                    return _matchMonthYear(dateField);
+                  }).toList();
 
                   docs = docs.where((d) {
                     final data = d.data() as Map<String, dynamic>;
@@ -161,6 +222,7 @@ class _KehadiranPageState extends State<KehadiranPage> {
                         _formatDisplayDate(data['date'] ?? data['check_in_at']);
                     final status = _computeStatus(
                         data['check_in'] ?? '', data['check_out'] ?? '');
+
                     return tanggal
                             .toLowerCase()
                             .contains(_searchText.toLowerCase()) ||
@@ -203,7 +265,9 @@ class _KehadiranPageState extends State<KehadiranPage> {
     );
   }
 
-  /// HEADER — BACK SEJAJAR JUDUL
+  /// ===============================
+  /// HEADER
+  /// ===============================
   Widget _buildHeader() {
     return Container(
       height: 160,
@@ -221,23 +285,26 @@ class _KehadiranPageState extends State<KehadiranPage> {
             icon: const Icon(Icons.arrow_back, color: Colors.white, size: 28),
             onPressed: () => Navigator.pop(context),
           ),
-          Expanded(
+          const Expanded(
             child: Center(
               child: Text(
                 "Rekapan Kehadiran",
-                style: const TextStyle(
+                style: TextStyle(
                     color: Colors.white,
                     fontSize: 22,
                     fontWeight: FontWeight.bold),
               ),
             ),
           ),
-          const SizedBox(width: 48), // penyeimbang kanan
+          const SizedBox(width: 48),
         ],
       ),
     );
   }
 
+  /// ===============================
+  /// CARD
+  /// ===============================
   Widget _buildCard({
     required String docId,
     required String masuk,
@@ -270,8 +337,10 @@ class _KehadiranPageState extends State<KehadiranPage> {
                 const SizedBox(height: 8),
                 Text("Masuk : $masuk",
                     style: TextStyle(color: _getJamColor(masuk))),
-                Text("Keluar : ${keluar.isEmpty ? '--:--' : keluar}",
-                    style: TextStyle(color: _getJamColor(keluar))),
+                Text(
+                  "Keluar : ${keluar.isEmpty ? '--:--' : keluar}",
+                  style: TextStyle(color: _getJamColor(keluar)),
+                ),
               ],
             ),
           ),

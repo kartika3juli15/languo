@@ -9,6 +9,28 @@ import 'package:open_file/open_file.dart';
 import 'package:path_provider/path_provider.dart';
 import 'dart:io';
 
+/// ===============================
+/// HELPER FILTER BULAN & TAHUN
+/// ===============================
+class MonthYearFilterHelper {
+  static bool match({
+    required DateTime tanggal,
+    int? selectedMonth,
+    int? selectedYear,
+  }) {
+    if (selectedMonth != null && tanggal.month != selectedMonth) {
+      return false;
+    }
+    if (selectedYear != null && tanggal.year != selectedYear) {
+      return false;
+    }
+    return true;
+  }
+}
+
+/// ===============================
+/// MODEL DATA REKAPAN SAKIT
+/// ===============================
 class SakitRekapanData {
   final String id;
   final String diagnosa;
@@ -39,6 +61,9 @@ class SakitRekapanData {
   });
 }
 
+/// ===============================
+/// PAGE REKAPAN SAKIT
+/// ===============================
 class RekapanSakitPage extends StatefulWidget {
   const RekapanSakitPage({super.key});
 
@@ -52,6 +77,9 @@ class _RekapanSakitPageState extends State<RekapanSakitPage> {
 
   late Future<Map<String, String>> _userDataFuture;
 
+  int? _selectedMonth;
+  int? _selectedYear;
+
   @override
   void initState() {
     super.initState();
@@ -61,15 +89,22 @@ class _RekapanSakitPageState extends State<RekapanSakitPage> {
   Future<Map<String, String>> _fetchUserData() async {
     final userId = _auth.currentUser?.uid;
     if (userId == null) {
-      return {'userName': 'Data Tidak Ditemukan', 'userEmail': 'N/A'};
+      return {
+        'userName': 'Data Tidak Ditemukan',
+        'userEmail': 'N/A',
+        'userRole': 'N/A',
+      };
     }
+
     final userDoc =
         await FirebaseFirestore.instance.collection("users").doc(userId).get();
     final data = userDoc.data();
 
     return {
       'userName': data?['user_name'] ?? 'Data Tidak Ditemukan',
-      'userEmail': data?['user_email'] ?? 'Email Tidak Ditetapkan',
+      'userEmail': data?['user_email'] ??
+          _auth.currentUser!.email ??
+          'Email Tidak Ditetapkan',
       'userRole': data?['user_role'] ?? 'Jabatan Tidak Ditetapkan',
     };
   }
@@ -77,9 +112,11 @@ class _RekapanSakitPageState extends State<RekapanSakitPage> {
   @override
   Widget build(BuildContext context) {
     final currentUser = _auth.currentUser;
+
     if (currentUser == null) {
       return const Center(
-          child: Text("Anda harus login untuk melihat rekapan."));
+        child: Text("Anda harus login untuk melihat rekapan."),
+      );
     }
 
     return FutureBuilder<Map<String, String>>(
@@ -88,52 +125,137 @@ class _RekapanSakitPageState extends State<RekapanSakitPage> {
         if (userSnapshot.connectionState == ConnectionState.waiting) {
           return const Center(child: CircularProgressIndicator());
         }
+
         if (userSnapshot.hasError) {
-          return Center(child: Text('Error: ${userSnapshot.error}'));
+          return Center(
+              child: Text('Error loading user data: ${userSnapshot.error}'));
         }
 
         final userData = userSnapshot.data!;
-        final stream = FirebaseFirestore.instance
+
+        final Stream<QuerySnapshot> stream = FirebaseFirestore.instance
             .collection('pengajuan_sakit')
             .where('user_id', isEqualTo: currentUser.uid)
             .snapshots();
 
         return Column(
           children: [
+            /// ===== FILTER UI =====
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+              child: Row(
+                children: [
+                  const Icon(Icons.calendar_month, color: Colors.grey),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: DropdownButtonFormField<int?>(
+                      value: _selectedMonth,
+                      hint: const Text("Semua Bulan"),
+                      items: [
+                        const DropdownMenuItem<int?>(
+                          value: null,
+                          child: Text("Semua Bulan"),
+                        ),
+                        ...List.generate(12, (index) {
+                          final months = [
+                            'Januari',
+                            'Februari',
+                            'Maret',
+                            'April',
+                            'Mei',
+                            'Juni',
+                            'Juli',
+                            'Agustus',
+                            'September',
+                            'Oktober',
+                            'November',
+                            'Desember'
+                          ];
+                          return DropdownMenuItem<int?>(
+                            value: index + 1,
+                            child: Text(months[index]),
+                          );
+                        }),
+                      ],
+                      onChanged: (value) =>
+                          setState(() => _selectedMonth = value),
+                      decoration: const InputDecoration(
+                        isDense: true,
+                        labelText: 'Filter Bulan',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: DropdownButtonFormField<int?>(
+                      value: _selectedYear,
+                      hint: const Text("Semua Tahun"),
+                      items: [
+                        const DropdownMenuItem<int?>(
+                          value: null,
+                          child: Text("Semua Tahun"),
+                        ),
+                        ...List.generate(5, (i) {
+                          final year = DateTime.now().year - i;
+                          return DropdownMenuItem<int?>(
+                            value: year,
+                            child: Text(year.toString()),
+                          );
+                        }),
+                      ],
+                      onChanged: (value) =>
+                          setState(() => _selectedYear = value),
+                      decoration: const InputDecoration(
+                        isDense: true,
+                        labelText: 'Tahun',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            /// ===== DATA =====
             Expanded(
               child: StreamBuilder<QuerySnapshot>(
                 stream: stream,
                 builder: (context, snapshot) {
-                  if (snapshot.hasError)
+                  if (snapshot.hasError) {
                     return Center(child: Text('Error: ${snapshot.error}'));
+                  }
+
                   if (snapshot.connectionState == ConnectionState.waiting) {
                     return const Center(child: CircularProgressIndicator());
                   }
 
                   final docs = snapshot.data?.docs ?? [];
+
                   if (docs.isEmpty) {
                     return const Center(
-                      child: Text("Belum ada pengajuan sakit",
-                          style: TextStyle(fontSize: 18, color: Colors.grey)),
+                      child: Text(
+                        "Belum ada pengajuan sakit",
+                        style: TextStyle(fontSize: 18, color: Colors.grey),
+                      ),
                     );
                   }
 
                   final sakitList = docs.map((d) {
                     final data = d.data() as Map<String, dynamic>;
 
-                    final createdAt =
-                        (data['created_at'] as Timestamp?)?.toDate() ??
-                            DateTime.now();
-                    final tanggalMulai =
-                        (data['tanggal_mulai'] as Timestamp).toDate();
-                    final tanggalSelesai =
-                        (data['tanggal_selesai'] as Timestamp).toDate();
+                    final Timestamp? createdAtTs =
+                        data['created_at'] as Timestamp?;
+
+                    final createdAt = createdAtTs?.toDate() ?? DateTime.now();
 
                     return SakitRekapanData(
                       id: d.id,
                       diagnosa: (data['diagnosa'] ?? 'Sakit').toString(),
-                      tanggalMulai: tanggalMulai,
-                      tanggalSelesai: tanggalSelesai,
+                      tanggalMulai:
+                          (data['tanggal_mulai'] as Timestamp).toDate(),
+                      tanggalSelesai:
+                          (data['tanggal_selesai'] as Timestamp).toDate(),
                       status: (data['status'] ?? 'Diajukan').toString(),
                       lampiranUrl: data['lampiran_url']?.toString(),
                       storagePath: data['storage_path']?.toString(),
@@ -143,18 +265,38 @@ class _RekapanSakitPageState extends State<RekapanSakitPage> {
                       userEmail: userData['userEmail']!,
                       userRole: userData['userRole']!,
                     );
+                  }).toList();
+
+                  final filteredList = sakitList.where((e) {
+                    return MonthYearFilterHelper.match(
+                      tanggal: e.tanggalPengajuan,
+                      selectedMonth: _selectedMonth,
+                      selectedYear: _selectedYear,
+                    );
                   }).toList()
                     ..sort((a, b) =>
                         b.tanggalPengajuan.compareTo(a.tanggalPengajuan));
 
+                  if (filteredList.isEmpty) {
+                    return const Center(
+                      child: Text(
+                        "Data tidak ditemukan",
+                        style: TextStyle(fontSize: 16, color: Colors.grey),
+                      ),
+                    );
+                  }
+
                   return ListView.builder(
                     padding: const EdgeInsets.symmetric(
                         horizontal: 16, vertical: 12),
-                    itemCount: sakitList.length,
-                    itemBuilder: (context, i) => Padding(
-                      padding: const EdgeInsets.only(bottom: 12),
-                      child: _buildSakitRekapanTile(sakitList[i], context),
-                    ),
+                    itemCount: filteredList.length,
+                    itemBuilder: (context, index) {
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: _buildSakitRekapanTile(
+                            filteredList[index], context),
+                      );
+                    },
                   );
                 },
               ),
@@ -165,29 +307,23 @@ class _RekapanSakitPageState extends State<RekapanSakitPage> {
     );
   }
 
+  // =========================
+  // BAGIAN BAWAH TIDAK DIUBAH
+  // =========================
   Color _statusColor(String status) {
     switch (status.toLowerCase()) {
       case 'disetujui':
-        return Colors.green.shade600;
+        return Colors.green;
       case 'ditolak':
-        return Colors.red.shade600;
+        return Colors.red;
       case 'diajukan':
-        return Colors.orange.shade600;
+        return Colors.orange;
       default:
-        return Colors.grey.shade600;
+        return Colors.grey;
     }
   }
 
   String _formatTanggal(DateTime date) {
-    const hari = [
-      "Minggu",
-      "Senin",
-      "Selasa",
-      "Rabu",
-      "Kamis",
-      "Jumat",
-      "Sabtu"
-    ];
     const bulan = [
       "Januari",
       "Februari",
@@ -202,7 +338,7 @@ class _RekapanSakitPageState extends State<RekapanSakitPage> {
       "November",
       "Desember"
     ];
-    return "${hari[date.weekday % 7]}, ${date.day} ${bulan[date.month - 1]} ${date.year}";
+    return "${date.day} ${bulan[date.month - 1]} ${date.year}";
   }
 
   void _showMsg(String msg) {

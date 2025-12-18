@@ -24,6 +24,8 @@ class _RekapanAdminCutiPageState extends State<RekapanAdminCutiPage> {
   TextEditingController searchController = TextEditingController();
   String keyword = "";
   int expandedIndex = -1;
+  int? selectedMonth; // Filter bulan (null = semua bulan)
+  int selectedYear = DateTime.now().year;
 
   Future<void> _openPdf(String url) async {
     try {
@@ -73,10 +75,164 @@ class _RekapanAdminCutiPageState extends State<RekapanAdminCutiPage> {
           header(),
           _buildTabBar(),
           searchBar(),
+          _buildFilterButton(), // Filter button ditambahkan di sini
           Expanded(child: buildRekapanStream()),
         ],
       ),
     );
+  }
+
+  // -------------------------------------------------------------------------
+  // FILTER BUTTON
+  // -------------------------------------------------------------------------
+
+  Widget _buildFilterButton() {
+    return Padding(
+      padding: const EdgeInsets.only(left: 20, right: 20, top: 10, bottom: 10),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.end,
+        children: [
+          GestureDetector(
+            onTap: _showMonthFilterDialog,
+            child: Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                color: selectedMonth != null
+                    ? const Color(0xFF36546C)
+                    : Colors.grey.shade300,
+                borderRadius: BorderRadius.circular(10),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.1),
+                    blurRadius: 4,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: Icon(
+                Icons.filter_alt,
+                color:
+                    selectedMonth != null ? Colors.white : Colors.grey.shade700,
+                size: 22,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showMonthFilterDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text("Filter Bulan",
+            style: TextStyle(fontWeight: FontWeight.bold)),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Pilih Tahun
+                Container(
+                  padding: const EdgeInsets.symmetric(vertical: 10),
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade100,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Padding(
+                        padding: EdgeInsets.only(left: 15),
+                        child: Text("Tahun:",
+                            style: TextStyle(fontWeight: FontWeight.bold)),
+                      ),
+                      Row(
+                        children: [
+                          IconButton(
+                            icon: const Icon(Icons.arrow_back_ios, size: 16),
+                            onPressed: () {
+                              setState(() => selectedYear--);
+                              Navigator.pop(context);
+                              _showMonthFilterDialog();
+                            },
+                          ),
+                          Text(selectedYear.toString(),
+                              style: const TextStyle(
+                                  fontSize: 16, fontWeight: FontWeight.bold)),
+                          IconButton(
+                            icon: const Icon(Icons.arrow_forward_ios, size: 16),
+                            onPressed: () {
+                              setState(() => selectedYear++);
+                              Navigator.pop(context);
+                              _showMonthFilterDialog();
+                            },
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 10),
+                const Divider(),
+                // Pilihan Bulan
+                ListTile(
+                  title: const Text("Semua Bulan",
+                      style: TextStyle(fontWeight: FontWeight.w600)),
+                  trailing: selectedMonth == null
+                      ? const Icon(Icons.check_circle, color: Colors.green)
+                      : null,
+                  onTap: () {
+                    setState(() => selectedMonth = null);
+                    Navigator.pop(context);
+                  },
+                ),
+                ...List.generate(12, (index) {
+                  final month = index + 1;
+                  return ListTile(
+                    title: Text(_getMonthName(month)),
+                    trailing: selectedMonth == month
+                        ? const Icon(Icons.check_circle, color: Colors.green)
+                        : null,
+                    onTap: () {
+                      setState(() => selectedMonth = month);
+                      Navigator.pop(context);
+                    },
+                  );
+                }),
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text("Tutup"),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _getMonthName(int month) {
+    const months = [
+      "Januari",
+      "Februari",
+      "Maret",
+      "April",
+      "Mei",
+      "Juni",
+      "Juli",
+      "Agustus",
+      "September",
+      "Oktober",
+      "November",
+      "Desember"
+    ];
+    return months[month - 1];
   }
 
   // STREAM FIRESTORE: status Disetujui / Ditolak + filter role
@@ -102,10 +258,36 @@ class _RekapanAdminCutiPageState extends State<RekapanAdminCutiPage> {
           );
         }
 
+        // FILTER pencarian dan bulan
         final filteredDocs = snapshot.data!.docs.where((doc) {
           final nama = (doc["user_name"] ?? "").toString().toLowerCase();
-          return nama.contains(keyword);
+
+          // Filter berdasarkan keyword
+          bool matchesKeyword = nama.contains(keyword);
+
+          // Filter berdasarkan bulan
+          bool matchesMonth = true;
+          if (selectedMonth != null) {
+            final tanggalVerifikasiTimestamp =
+                doc["tanggal_verifikasi"] as Timestamp?;
+            if (tanggalVerifikasiTimestamp != null) {
+              final tanggalVerifikasi = tanggalVerifikasiTimestamp.toDate();
+              matchesMonth = tanggalVerifikasi.month == selectedMonth &&
+                  tanggalVerifikasi.year == selectedYear;
+            } else {
+              matchesMonth = false;
+            }
+          }
+
+          return matchesKeyword && matchesMonth;
         }).toList();
+
+        if (filteredDocs.isEmpty) {
+          return const Center(
+            child: Text("Tidak ada data yang sesuai filter.",
+                style: TextStyle(color: Colors.grey)),
+          );
+        }
 
         return ListView.builder(
           padding: const EdgeInsets.only(top: 10),

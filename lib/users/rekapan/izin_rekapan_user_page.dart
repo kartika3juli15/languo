@@ -392,8 +392,7 @@ class _RekapanIzinPageState extends State<RekapanIzinPage> {
                         Padding(
                           padding: const EdgeInsets.only(top: 15.0),
                           child: ElevatedButton.icon(
-                            onPressed: () =>
-                                _openPdf(izin.lampiranUrl!),
+                            onPressed: () => _openPdf(izin.lampiranUrl!),
                             icon: const Icon(Icons.file_download,
                                 size: 20, color: Colors.white),
                             label: const Text("Lihat Lampiran",

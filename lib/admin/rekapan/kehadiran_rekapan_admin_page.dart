@@ -17,25 +17,21 @@ class _AdminKehadiranPageState extends State<AdminKehadiranPage> {
 
   final TextEditingController searchController = TextEditingController();
 
+  int? _selectedMonth; // null = semua bulan
+
   /// ===============================
   /// AMBIL DATA USER
   /// ===============================
   Future<Map<String, dynamic>?> _getUser(String userId) async {
-    try {
-      final doc = await _firestore.collection('users').doc(userId).get();
-      if (!doc.exists) return null;
+    final doc = await _firestore.collection('users').doc(userId).get();
+    if (!doc.exists) return null;
 
-      final d = doc.data()!;
-      return {
-        'user_id': userId,
-        'user_name': d['user_name'] ?? '',
-        'user_email': d['user_email'] ?? '',
-        'user_role': d['user_role'] ?? '',
-      };
-    } catch (e) {
-      debugPrint('Get user error: $e');
-      return null;
-    }
+    final d = doc.data()!;
+    return {
+      'user_name': d['user_name'] ?? '',
+      'user_email': d['user_email'] ?? '',
+      'user_role': d['user_role'] ?? '',
+    };
   }
 
   /// ===============================
@@ -48,28 +44,20 @@ class _AdminKehadiranPageState extends State<AdminKehadiranPage> {
         .snapshots();
   }
 
-  /// ===============================
-  /// FORMAT TANGGAL
-  /// ===============================
   String _formatDate(Timestamp? ts) {
     if (ts == null) return '-';
     return DateFormat('EEE, dd MMM yyyy', 'id').format(ts.toDate());
   }
 
-  /// ===============================
-  /// STATUS ABSENSI
-  /// ===============================
-  String _status(String inTime, String outTime) {
-    if (inTime.isEmpty || outTime.isEmpty) return 'Proses';
-    return 'Hadir';
-  }
+  String _status(String i, String o) =>
+      (i.isEmpty || o.isEmpty) ? 'Proses' : 'Hadir';
 
   Color _jamColor(String jam) => jam.isEmpty ? Colors.grey : Colors.green;
 
-  bool _matchSearch(String q, String name, String email) {
+  bool _matchSearch(String q, String n, String e) {
     if (q.isEmpty) return true;
     q = q.toLowerCase();
-    return name.toLowerCase().contains(q) || email.toLowerCase().contains(q);
+    return n.toLowerCase().contains(q) || e.toLowerCase().contains(q);
   }
 
   @override
@@ -91,6 +79,7 @@ class _AdminKehadiranPageState extends State<AdminKehadiranPage> {
           _tabBar(),
           const SizedBox(height: 8),
           _search(),
+          _filter(),
           const SizedBox(height: 10),
           Expanded(child: _list()),
         ],
@@ -98,6 +87,9 @@ class _AdminKehadiranPageState extends State<AdminKehadiranPage> {
     );
   }
 
+  /// ===============================
+  /// HEADER (BACK TETAP ADA)
+  /// ===============================
   Widget _header() {
     return Container(
       height: 160,
@@ -112,12 +104,9 @@ class _AdminKehadiranPageState extends State<AdminKehadiranPage> {
         children: [
           Align(
             alignment: Alignment.centerLeft,
-            child: GestureDetector(
-              onTap: () => Navigator.pop(context),
-              child: const Padding(
-                padding: EdgeInsets.only(left: 16),
-                child: Icon(Icons.arrow_back, color: Colors.white, size: 28),
-              ),
+            child: IconButton(
+              icon: const Icon(Icons.arrow_back, color: Colors.white, size: 28),
+              onPressed: () => Navigator.pop(context),
             ),
           ),
           const Align(
@@ -135,6 +124,9 @@ class _AdminKehadiranPageState extends State<AdminKehadiranPage> {
     );
   }
 
+  /// ===============================
+  /// TAB
+  /// ===============================
   Widget _tabBar() {
     return Transform.translate(
       offset: const Offset(0, -28),
@@ -175,7 +167,6 @@ class _AdminKehadiranPageState extends State<AdminKehadiranPage> {
             t,
             style: TextStyle(
               color: active ? Colors.white : Colors.black54,
-              fontSize: 16,
               fontWeight: FontWeight.w700,
             ),
           ),
@@ -184,6 +175,9 @@ class _AdminKehadiranPageState extends State<AdminKehadiranPage> {
     );
   }
 
+  /// ===============================
+  /// SEARCH
+  /// ===============================
   Widget _search() {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 28),
@@ -192,9 +186,9 @@ class _AdminKehadiranPageState extends State<AdminKehadiranPage> {
         onChanged: (_) => setState(() {}),
         decoration: InputDecoration(
           hintText: 'Cari nama / email...',
+          prefixIcon: const Icon(Icons.search),
           filled: true,
           fillColor: Colors.white,
-          prefixIcon: const Icon(Icons.search),
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(14),
             borderSide: BorderSide.none,
@@ -204,6 +198,45 @@ class _AdminKehadiranPageState extends State<AdminKehadiranPage> {
     );
   }
 
+  /// ===============================
+  /// FILTER BULAN
+  /// ===============================
+  Widget _filter() {
+    return Padding(
+      padding: const EdgeInsets.only(right: 28, top: 6),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.end,
+        children: [
+          PopupMenuButton<int?>(
+            tooltip: 'Filter Bulan',
+            icon: Icon(
+              Icons.filter_alt_outlined,
+              color: _selectedMonth != null ? Colors.orange : Colors.grey,
+            ),
+            onSelected: (v) => setState(() => _selectedMonth = v),
+            itemBuilder: (context) => [
+              const PopupMenuItem<int?>(
+                value: null,
+                child: Text('Semua Bulan'),
+              ),
+              ...List.generate(12, (i) {
+                return PopupMenuItem<int?>(
+                  value: i + 1,
+                  child: Text(
+                    DateFormat.MMMM('id').format(DateTime(0, i + 1)),
+                  ),
+                );
+              }),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// ===============================
+  /// LIST
+  /// ===============================
   Widget _list() {
     return StreamBuilder<QuerySnapshot>(
       stream: _absensiStream(),
@@ -236,7 +269,7 @@ class _AdminKehadiranPageState extends State<AdminKehadiranPage> {
   }
 
   /// ===============================
-  /// PROCESS DATA
+  /// PROCESS DATA (SEARCH + FILTER)
   /// ===============================
   Future<List<Map<String, dynamic>>> _process(
       List<QueryDocumentSnapshot> docs) async {
@@ -246,31 +279,30 @@ class _AdminKehadiranPageState extends State<AdminKehadiranPage> {
     for (final doc in docs) {
       final d = doc.data() as Map<String, dynamic>;
       final userId = d['user_id'];
+      final ts = d['check_in_at'];
 
-      if (userId == null) continue;
+      if (ts is! Timestamp) continue;
+
+      if (_selectedMonth != null && ts.toDate().month != _selectedMonth)
+        continue;
 
       final user = await _getUser(userId);
       if (user == null) continue;
       if (user['user_role'] != selectedRole) continue;
-
-      final name = user['user_name'];
-      final email = user['user_email'];
-      if (!_matchSearch(q, name, email)) continue;
+      if (!_matchSearch(q, user['user_name'], user['user_email'])) continue;
 
       final inTime = d['check_in'] ?? '';
       final outTime = d['check_out'] ?? '';
 
       result.add({
-        'docId': doc.id,
-        'user_name': name,
-        'user_email': email,
-        'tanggal': _formatDate(d['check_in_at']),
+        'user_name': user['user_name'],
+        'user_email': user['user_email'],
+        'tanggal': _formatDate(ts),
         'check_in': inTime,
         'check_out': outTime,
         'status': _status(inTime, outTime),
       });
     }
-
     return result;
   }
 
@@ -284,13 +316,6 @@ class _AdminKehadiranPageState extends State<AdminKehadiranPage> {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.08),
-            blurRadius: 10,
-            offset: const Offset(0, 3),
-          ),
-        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -322,12 +347,9 @@ class _AdminKehadiranPageState extends State<AdminKehadiranPage> {
       child: Row(
         children: [
           SizedBox(width: 60, child: Text(l)),
-          Text(': '),
+          const Text(': '),
           Expanded(
-            child: Text(
-              v.isEmpty ? '--:--' : v,
-              style: TextStyle(color: c),
-            ),
+            child: Text(v.isEmpty ? '--:--' : v, style: TextStyle(color: c)),
           ),
         ],
       ),
